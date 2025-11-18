@@ -1,15 +1,20 @@
-fx_version 'cerulean'
-games { 'gta5' }
 
-author "Swkeep#7049"
+fx_version 'cerulean'
+game 'gta5'
+
+author "Swkeep#7049 - Converted By Byanski_the_Dev"
+description "Keep Companion - Converted"
+version "2.0.0"
 
 shared_scripts {
      '@qb-core/shared/locale.lua',
+     '@ox_lib/init.lua',
      'locales/en.lua',
      'config.lua',
      'shared/shared.lua',
      'shared/util.lua',
-     'shared/badwords.lua' }
+     'shared/badwords.lua'
+}
 
 client_scripts {
      'client/animator.lua',
@@ -24,3 +29,6 @@ server_scripts {
      'server/functions.lua',
      'server/server.lua'
 }
+
+lua54 'yes'
+use_experimental_fxv2_oal 'yes'

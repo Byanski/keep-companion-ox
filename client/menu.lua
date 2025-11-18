@@ -1,20 +1,24 @@
 QBCore = exports['qb-core']:GetCoreObject()
 
 local isMenuOpen = false
-PlayerData = nil
-PlayerJob = nil
+local PlayerData = nil
+local PlayerJob = nil
 
 local alreadyHunting = {
     state = false
 }
 
-local function updatePlayerJob()
-    repeat
-        Wait(10)
-    until QBCore.Functions.GetPlayerData().job ~= nil
-    PlayerData =  QBCore.Functions.GetPlayerData()
-    PlayerJob = QBCore.Functions.GetPlayerData().job
-end
+-- Get player data on resource start
+CreateThread(function()
+    PlayerData = QBCore.Functions.GetPlayerData()
+    PlayerJob = PlayerData.job
+end)
+
+-- Update PlayerData when it changes
+RegisterNetEvent('QBCore:Player:SetPlayerData', function(val)
+    PlayerData = val
+    PlayerJob = val.job
+end)
 
 local function isModelK9(model)
     for key, k9 in pairs(Config.k9.models) do
@@ -30,8 +34,6 @@ local menu = {
     [1] = {
         lable = Lang:t('menu.action_menu.follow'),
         TYPE = 'Follow',
-        -- triggerNotification = {'onSuccess', 'onFailed'},
-        -- and action should retrun a bool value true == onSuccess ,false == onFailed
         triggerNotification = { 'PETNAME is now following you!', 'PETNAME failed to follow you!' },
         action = function(plyped, activePed)
             doSomethingIfPedIsInsideVehicle(activePed.entity)
@@ -45,19 +47,19 @@ local menu = {
         action = function(plyped, activePed)
             local min_lvl_to_hunt = Config.Settings.minHuntingAbilityLevel
             if activePed.canHunt ~= true then
-                QBCore.Functions.Notify(Lang:t('menu.action_menu.error.pet_unable_to_hunt'), 'error', 5000)
+                exports.qbx_core:Notify(Lang:t('menu.action_menu.error.pet_unable_to_hunt'), 'error', 5000)
                 return false
             end
 
             if alreadyHunting.state ~= false then
-                QBCore.Functions.Notify(Lang:t('menu.action_menu.error.already_hunting_something'), 'error', 5000)
+                exports.qbx_core:Notify(Lang:t('menu.action_menu.error.already_hunting_something'), 'error', 5000)
                 return
             end
 
             if activePed.itemData.metadata.level <= min_lvl_to_hunt then
                 local msg = Lang:t('menu.action_menu.error.not_meet_min_requirement_to_hunt')
                 msg = string.format(msg, min_lvl_to_hunt)
-                QBCore.Functions.Notify(msg, 'error', 5000)
+                exports.qbx_core:Notify(msg, 'error', 5000)
                 return false
             end
 
@@ -71,14 +73,14 @@ local menu = {
         action = function(plyped, activePed)
             local min_lvl_to_hunt = Config.Settings.minHuntingAbilityLevel
             if activePed.canHunt ~= true then
-                QBCore.Functions.Notify(Lang:t('menu.action_menu.error.pet_unable_to_hunt'), 'error', 5000)
+                exports.qbx_core:Notify(Lang:t('menu.action_menu.error.pet_unable_to_hunt'), 'error', 5000)
                 return false
             end
 
             if activePed.itemData.metadata.level <= min_lvl_to_hunt then
                 local msg = Lang:t('menu.action_menu.error.not_meet_min_requirement_to_hunt')
                 msg = string.format(msg, min_lvl_to_hunt)
-                QBCore.Functions.Notify(msg, 'error', 5000)
+                exports.qbx_core:Notify(msg, 'error', 5000)
                 return false
             end
 
@@ -132,104 +134,6 @@ local menu = {
     }
 }
 
-local coo = {
-    [1] = {
-        offset = vector4(-1.5, 0.0, 0.0, -90.0),
-    },
-    [2] = {
-        offset = vector4(0.0, -2.8, 0.0, 0.0),
-    },
-    -- [3] = {
-    --     offset = vector4(1.5, 0.0, 0.0, -270.0),
-    -- },
-}
-
-function k9SearchVehicle(veh, activePed)
-    if not isModelK9(activePed.model) then
-        QBCore.Functions.Notify('This pet can not do that!', "error", 1500)
-        return
-    end
-    if not PlayerJob then return end
-    if not (PlayerJob.name == 'police') then
-        QBCore.Functions.Notify('You are not allowed to do this action', "error", 1500)
-        return
-    end
-
-    if not PlayerJob.onduty == true then
-        QBCore.Functions.Notify('You Must be on duty to do this action', "error", 1500)
-        return
-    end
-
-    for key, value in pairs(coo) do
-        local vehHead = GetEntityHeading(veh)
-        local plate = GetVehicleNumberPlateText(veh)
-        local pos = GetOffsetFromEntityInWorldCoords(veh, value.offset.x, value.offset.y, value.offset.z)
-        TaskFollowNavMeshToCoord(activePed.entity, pos, 3.0, -1, 0.0, true, 0)
-        Wait(4000)
-        TaskAchieveHeading(activePed.entity, vehHead + value.offset.w, -1)
-        Wait(2000)
-        QBCore.Functions.TriggerCallback('keep-companion:server:search_vehicle', function(result)
-            if result then
-                SetAnimalMood(activePed.entity, 1)
-                PlayAnimalVocalization(activePed.entity, 3, 'bark')
-                Animator(activePed.entity, activePed.model, 'misc', {
-                    animation = 'indicate_high',
-                    sequentialTimings = {
-                        -- How close the value is to the Timeout value determines how fast the script moves to the next animation.
-                        [1] = 6, -- start animation Timeout ==> 1sec(6s-5s) to loop
-                        [2] = 0, -- loop animation Timeout  ==> 6sec(6s-0s) to exit
-                        [3] = 2, -- exit animation Timeout  ==> 4sec(6s-2s) to end
-                        step = 1,
-                        Timeout = 6
-                    }
-                })
-                return
-            end
-            Animator(activePed.entity, activePed.model, 'siting', {
-                animation = 'sit',
-                sequentialTimings = {
-                    -- How close the value is to the Timeout value determines how fast the script moves to the next animation.
-                    [1] = 6, -- start animation Timeout ==> 1sec(6s-5s) to loop
-                    [2] = 0, -- loop animation Timeout  ==> 6sec(6s-0s) to exit
-                    [3] = 2, -- exit animation Timeout  ==> 4sec(6s-2s) to end
-                    step = 1,
-                    Timeout = 6
-                }
-            })
-        end, {
-            key = key,
-            plate = plate
-        })
-        Wait(3000)
-    end
-end
-
-function k9EnterVehicle(k9, veh)
-    local vehCoords = GetEntityCoords(veh)
-    local forwardX = GetEntityForwardX(veh) * 2.0
-    local forwardY = GetEntityForwardY(veh) * 2.0
-
-    SetVehicleDoorOpen(veh, 5, false)
-    TaskFollowNavMeshToCoord(k9, vehCoords.x - forwardX, vehCoords.y - forwardY, vehCoords.z, 4.0, -1, 1.0, 1, 1)
-    Wait(5000)
-    TaskAchieveHeading(k, GetEntityHeading(veh), -1)
-    RequestAnimDict("creatures@rottweiler@in_vehicle@van", true)
-    RequestAnimDict("creatures@rottweiler@amb@world_dog_sitting@base", true)
-    while not HasAnimDictLoaded("creatures@rottweiler@in_vehicle@van") or
-        not HasAnimDictLoaded("creatures@rottweiler@amb@world_dog_sitting@base") do
-        Citizen.Wait(0)
-    end
-    TaskPlayAnim(k9, "creatures@rottweiler@in_vehicle@van", "get_in", 8.0, -4.0, -1, 2, 0.0, false, false, false)
-    Wait(1100)
-    ClearPedTasks(k9)
-    AttachEntityToEntity(k9, veh, GetEntityBoneIndexByName(veh, "chassis"), 0.0, -0.8, 0.6, 0.0, 0.0, 0.0, false, false,
-        false, false, 0, true)
-    TaskPlayAnim(k9, "creatures@rottweiler@amb@world_dog_sitting@base", "base", 8.0, -4.0, -1, 1, 0.0, false, false,
-        false)
-    Wait(500)
-    SetVehicleDoorShut(veh, 5, false)
-end
-
 -- tricks menu
 local menu2 = {
     [1] = {
@@ -240,10 +144,9 @@ local menu2 = {
             Animator(activePed.entity, activePed.model, 'tricks', {
                 animation = 'beg',
                 sequentialTimings = {
-                    -- How close the value is to the Timeout value determines how fast the script moves to the next animation.
-                    [1] = 6, -- start animation Timeout ==> 1sec(6s-5s) to loop
-                    [2] = 0, -- loop animation Timeout  ==> 6sec(6s-0s) to exit
-                    [3] = 2, -- exit animation Timeout  ==> 4sec(6s-2s) to end
+                    [1] = 6,
+                    [2] = 0,
+                    [3] = 2,
                     step = 1,
                     Timeout = 6
                 }
@@ -265,7 +168,6 @@ local menu2 = {
         TYPE = 'Playdead',
         icon = 'fa-solid fa-face-dizzy',
         action = function(plyped, activePed)
-            -- PlayFacialAnim(activePed.entity, "dying_facial", "creatures@rottweiler@move")
             Animator(activePed.entity, activePed.model, 'misc', {
                 animation = 'play_dead',
                 c_timings = 'STOP_LAST_FRAME'
@@ -275,13 +177,12 @@ local menu2 = {
 }
 
 local function replaceString(s)
-    local x
-    x = s:gsub("PETNAME", ActivePed.read().itemData.metadata.name)
+    local x = s:gsub("PETNAME", ActivePed.read().itemData.metadata.name)
     return x
 end
 
--- Command
-AddEventHandler('keep-companion:client:actionMenuDispatcher', function(option)
+-- Command dispatcher
+RegisterNetEvent('keep-companion:client:actionMenuDispatcher', function(option)
     local plyped = PlayerPedId()
     local activePed = ActivePed.read()
     activePed.entity = NetworkGetEntityFromNetworkId(activePed.netId)
@@ -289,11 +190,11 @@ AddEventHandler('keep-companion:client:actionMenuDispatcher', function(option)
         if option.type == values.TYPE then
             if values.action(plyped, activePed) == true then
                 if values.triggerNotification ~= nil then
-                    QBCore.Functions.Notify(replaceString(values.triggerNotification[1]), 'success', 1500)
+                    exports.qbx_core:Notify(replaceString(values.triggerNotification[1]), 'success', 1500)
                 end
             else
                 if values.triggerNotification ~= nil then
-                    QBCore.Functions.Notify(replaceString(values.triggerNotification[2]))
+                    exports.qbx_core:Notify(replaceString(values.triggerNotification[2]))
                 end
             end
         end
@@ -305,545 +206,419 @@ function get_correct_icon(model)
         if model == value.model then
             for w in value.distinct:gmatch("%S+") do
                 if w == 'dog' then
-                    return 'fa-solid fa-dog'
+                    return 'dog'
                 elseif w == 'rabbit' then
-                    return 'fa-solid fa-paw'
+                    return 'paw'
                 elseif w == 'hen' then
-                    return 'fa-solid fa-kiwi-bird'
+                    return 'dove'
                 end
             end
         end
     end
-    return 'fa-solid fa-cat'
+    return 'cat'
 end
 
-AddEventHandler('keep-companion:client:main_menu', function()
-    local name = ActivePed.read().itemData.metadata.name
-    local model = ActivePed.read().model
-    local icon = get_correct_icon(model)
-    local header = string.format(Lang:t('menu.main_menu.header'), name)
-    local sub_header = Lang:t('menu.main_menu.sub_header')
-
-    -- header
-    local openMenu = { {
-        header = header,
-        txt = sub_header,
-        icon = icon,
-        isMenuHeader = true
-    }, {
-        header = Lang:t('menu.main_menu.btn_actions'),
-        icon = 'fa-solid fa-circle-play',
-        params = {
-            event = "keep-companion:client:action_menu"
-        }
-    }, {
-        header = Lang:t('menu.main_menu.btn_switchcontrol'),
-        txt = "",
-        icon = 'fa-solid fa-repeat',
-        params = {
-            event = "keep-companion:client:switchControl_menu"
-        }
-    }, {
-        header = Lang:t('menu.general_menu_items.btn_leave'),
-        txt = "",
-        icon = 'fa-solid fa-circle-xmark',
-        params = {
-            event = "qb-menu:closeMenu"
-        }
-    } }
-
-    exports['qb-menu']:openMenu(openMenu)
-end)
-
-AddEventHandler('keep-companion:client:action_menu', function()
-    local name = ActivePed.read().itemData.metadata.name
-    local header = string.format(Lang:t('menu.action_menu.header'), name)
-    local sub_header = Lang:t('menu.action_menu.sub_header')
-    local model = ActivePed.read().model
-    local icon = get_correct_icon(model)
-
-    -- header
-    local openMenu = {
-        {
-            header = Lang:t('menu.general_menu_items.btn_back'),
-            icon = 'fa-solid fa-angle-left',
-            params = {
-                event = "keep-companion:client:main_menu",
+-- Main Menu using ox_lib
+local function showMainMenu()
+    local activePet = ActivePed.read()
+    if not activePet then return end
+    
+    local name = activePet.itemData.metadata.name
+    local model = activePet.model
+    
+    lib.registerContext({
+        id = 'pet_main_menu',
+        title = string.format(Lang:t('menu.main_menu.header'), name),
+        options = {
+            {
+                title = Lang:t('menu.main_menu.btn_actions'),
+                description = Lang:t('menu.main_menu.sub_header'),
+                icon = 'circle-play',
+                onSelect = function()
+                    showActionMenu()
+                end
+            },
+            {
+                title = Lang:t('menu.main_menu.btn_switchcontrol'),
+                icon = 'repeat',
+                onSelect = function()
+                    showSwitchControlMenu()
+                end
             }
-        },
-        {
-            header = header,
-            txt = sub_header,
-            icon = icon,
-            isMenuHeader = true
         }
-    }
+    })
+    
+    lib.showContext('pet_main_menu')
+end
 
+-- Action Menu
+local function showActionMenu()
+    local activePet = ActivePed.read()
+    if not activePet then return end
+    
+    local name = activePet.itemData.metadata.name
+    local options = {}
+    
     for key, value in ipairs(menu) do
         if value.show then
-            if not value.show(ActivePed.read()) then
-                goto here
+            if not value.show(activePet) then
+                goto continue
             end
         end
-        openMenu[#openMenu + 1] = {
-            header = value.lable,
-            icon = 'fa-solid fa-' .. key,
-            txt = value.desc or "",
-            params = {
-                event = "keep-companion:client:actionMenuDispatcher",
-                args = {
+        
+        table.insert(options, {
+            title = value.lable,
+            icon = key,
+            onSelect = function()
+                TriggerEvent('keep-companion:client:actionMenuDispatcher', {
                     type = value.TYPE,
                     menu = menu
-                }
-            }
-        }
-        ::here::
+                })
+            end
+        })
+        ::continue::
     end
+    
+    -- Add tricks submenu
+    table.insert(options, {
+        title = Lang:t('menu.action_menu.tricks'),
+        icon = 'wand-magic-sparkles',
+        onSelect = function()
+            showTricksMenu()
+        end
+    })
+    
+    lib.registerContext({
+        id = 'pet_action_menu',
+        title = string.format(Lang:t('menu.action_menu.header'), name),
+        menu = 'pet_main_menu',
+        options = options
+    })
+    
+    lib.showContext('pet_action_menu')
+end
 
-    openMenu[#openMenu + 1] = {
-        header = Lang:t('menu.action_menu.tricks'),
-        icon = 'fa-solid fa-' .. #openMenu - 1,
-        txt = "",
-        params = {
-            event = "keep-companion:client:tricks_menu"
-        }
-    }
-
-    -- leave menu
-    openMenu[#openMenu + 1] = {
-        header = Lang:t('menu.general_menu_items.btn_leave'),
-        txt = "",
-        icon = 'fa-solid fa-circle-xmark',
-        params = {
-            event = "qb-menu:closeMenu"
-        }
-    }
-
-    exports['qb-menu']:openMenu(openMenu)
-end)
-
-AddEventHandler('keep-companion:client:tricks_menu', function()
-    local name = ActivePed.read().itemData.metadata.name
-    local header = string.format(Lang:t('menu.tricks.header'), name)
-    local sub_header = Lang:t('menu.tricks.sub_header')
-    local model = ActivePed.read().model
-    local icon = get_correct_icon(model)
-
-    -- header
-    local openMenu = {
-        {
-            header = Lang:t('menu.general_menu_items.btn_back'),
-            icon = 'fa-solid fa-angle-left',
-            params = {
-                event = "keep-companion:client:action_menu",
-            }
-        },
-        {
-            header = header,
-            txt = sub_header,
-            icon = icon,
-            isMenuHeader = true
-        }
-    }
-
+-- Tricks Menu
+local function showTricksMenu()
+    local activePet = ActivePed.read()
+    if not activePet then return end
+    
+    local name = activePet.itemData.metadata.name
+    local options = {}
+    
     for key, value in pairs(menu2) do
-        openMenu[#openMenu + 1] = {
-            header = value.lable,
-            txt = value.desc or "",
-            icon = value.icon,
-            params = {
-                event = "keep-companion:client:actionMenuDispatcher",
-                args = {
+        table.insert(options, {
+            title = value.lable,
+            icon = value.icon or 'star',
+            onSelect = function()
+                TriggerEvent('keep-companion:client:actionMenuDispatcher', {
                     type = value.TYPE,
                     menu = menu2
-                }
-            }
-        }
+                })
+            end
+        })
     end
+    
+    lib.registerContext({
+        id = 'pet_tricks_menu',
+        title = string.format(Lang:t('menu.tricks.header'), name),
+        menu = 'pet_action_menu',
+        options = options
+    })
+    
+    lib.showContext('pet_tricks_menu')
+end
 
-    -- leave menu
-    openMenu[#openMenu + 1] = {
-        header = Lang:t('menu.general_menu_items.btn_leave'),
-        txt = "",
-        icon = 'fa-solid fa-circle-xmark',
-        params = {
-            event = "qb-menu:closeMenu"
-        }
-    }
+-- Switch Control Menu
+local function showSwitchControlMenu()
+    local activePet = ActivePed.read()
+    if not activePet then return end
+    
+    local options = {}
+    
+    for key, value in pairs(ActivePed:petsList()) do
+        table.insert(options, {
+            title = value.name,
+            icon = 'paw',
+            onSelect = function()
+                ActivePed:switchControl(value.key)
+                showActionMenu()
+            end
+        })
+    end
+    
+    lib.registerContext({
+        id = 'pet_switch_menu',
+        title = Lang:t('menu.main_menu.btn_switchcontrol'),
+        menu = 'pet_main_menu',
+        options = options
+    })
+    
+    lib.showContext('pet_switch_menu')
+end
 
-    exports['qb-menu']:openMenu(openMenu)
-end)
-
-AddEventHandler('keep-companion:client:switchControl_menu', function()
-    local name = ActivePed.read().itemData.metadata.name
-    local header = string.format(Lang:t('menu.switchControl_menu.header'), name)
-    local sub_header = name
-
-    -- header
-    local openMenu = {
+-- Customization Menu
+local function showCustomizationMenu(data)
+    local c_name = data.item.metadata.name
+    local c_variation = data.item.metadata.variation
+    
+    local options = {
         {
-            header = Lang:t('menu.general_menu_items.btn_back'),
-            icon = 'fa-solid fa-angle-left',
-            params = {
-                event = "keep-companion:client:main_menu",
-            }
+            title = Lang:t('menu.customization_menu.btn_rename'),
+            description = Lang:t('menu.customization_menu.btn_txt_btn_rename') .. c_name,
+            icon = 'keyboard',
+            disabled = data.pet_information.disable.rename,
+            onSelect = function()
+                showRenameMenu(data)
+            end
         },
         {
-            header = header,
-            txt = sub_header,
-            icon = 'fa-solid fa-list-check',
-            isMenuHeader = true
+            title = Lang:t('menu.customization_menu.btn_select_variation'),
+            description = Lang:t('menu.customization_menu.btn_txt_select_variation') .. c_variation,
+            icon = 'brush',
+            onSelect = function()
+                showVariationMenu(data)
+            end
+        },
+        {
+            title = Lang:t('menu.general_menu_items.confirm'),
+            icon = 'circle-check',
+            onSelect = function()
+                TriggerServerEvent('keep-companion:server:compelete_initialization_process', data.item, data.pet_information.type)
+            end
         }
     }
+    
+    lib.registerContext({
+        id = 'pet_customization_menu',
+        title = Lang:t('menu.customization_menu.header'),
+        options = options
+    })
+    
+    lib.showContext('pet_customization_menu')
+end
 
-    for key, value in pairs(ActivePed:petsList()) do
-        openMenu[#openMenu + 1] = {
-            header = value.name,
-            icon = 'fa-solid fa-' .. key,
-            params = {
-                event = "keep-companion:client:switchControl_event",
-                args = {
-                    index = value.key
-                }
-            }
-        }
+local function showRenameMenu(data)
+    local input = lib.inputDialog('Rename Pet', {
+        {type = 'input', label = 'Pet Name', required = true, max = 12}
+    })
+    
+    if input and input[1] then
+        data.item.metadata.name = input[1]
+        showCustomizationMenu(data)
     end
+end
 
-    -- leave menu
-    openMenu[#openMenu + 1] = {
-        header = Lang:t('menu.general_menu_items.btn_leave'),
-        txt = "",
-        icon = 'fa-solid fa-circle-xmark',
-        params = {
-            event = "qb-menu:closeMenu"
-        }
-    }
+local function showVariationMenu(data)
+    local options = {}
+    
+    for key, value in pairs(data.pet_information.pet_variation_list) do
+        table.insert(options, {
+            title = 'Variation: ' .. value,
+            icon = 'brush',
+            onSelect = function()
+                data.item.metadata.variation = value
+                showCustomizationMenu(data)
+            end
+        })
+    end
+    
+    lib.registerContext({
+        id = 'pet_variation_menu',
+        title = Lang:t('menu.variation_menu.header'),
+        menu = 'pet_customization_menu',
+        options = options
+    })
+    
+    lib.showContext('pet_variation_menu')
+end
 
-    exports['qb-menu']:openMenu(openMenu)
-end)
-
-AddEventHandler('keep-companion:client:switchControl_event', function(option)
-    if option.index < 0 then
+RegisterNetEvent('keep-companion:client:initialization_process', function(item, pet_information)
+    if type(item) ~= "table" then
+        exports.qbx_core:Notify(Lang:t('error.failed_to_start_procces'), 'error', 5000)
         return
     end
-    ActivePed:switchControl(option.index)
-    TriggerEvent('keep-companion:client:action_menu')
-end)
-
-local function IsPoliceOrEMS()
-    return (PlayerJob.name == "police" or PlayerJob.name == "ambulance")
-end
-
-local function IsDowned()
-    return (PlayerData.metadata["isdead"] or PlayerData.metadata["inlaststand"])
-end
-
-local function Ishandcuffed()
-    return PlayerData.metadata["ishandcuffed"]
-end
-
-RegisterKeyMapping('+showMenu', 'show pet menu', 'keyboard', Config.Settings.petMenuKeybind)
-RegisterCommand('+showMenu', function()
-    updatePlayerJob()
-    if ((IsDowned() and IsPoliceOrEMS()) or not IsDowned()) and not Ishandcuffed() and not IsPauseMenuActive() and
-        not isMenuOpen then
-        local doesPlayerHavePet = ActivePed:read()
-
-        if doesPlayerHavePet == nil then
-            QBCore.Functions.Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
-            return
-        end
-
-        TriggerEvent('keep-companion:client:main_menu')
+    
+    if pet_information.type == 'init' then
+        showCustomizationMenu({item = item, pet_information = pet_information})
+        return
     end
-end, false)
-
--- This will update all the PlayerData that doesn't get updated with a specific event other than this like the metadata
-RegisterNetEvent('QBCore:Player:SetPlayerData', function(val)
-    PlayerData = val
+    
+    local hasitem = exports.ox_inventory:Search('count', Config.core_items.groomingkit.item_name)
+    if hasitem < 1 then 
+        exports.qbx_core:Notify('You need grooming kit', 'error', 5000) 
+        return 
+    end
+    
+    showCustomizationMenu({item = item, pet_information = pet_information})
 end)
 
--- =======================================
---           Customization menu
--- =======================================
 RegisterNetEvent('keep-companion:client:start_grooming_process', function()
     local activePed = ActivePed:read()
     if type(activePed) ~= "table" then
-        QBCore.Functions.Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
+        exports.qbx_core:Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
         return
     end
     TriggerServerEvent('keep-companion:server:grooming_process', activePed.itemData)
 end)
 
-RegisterNetEvent('keep-companion:client:initialization_process', function(item, pet_metadatarmation)
-    if type(item) ~= "table" then
-        QBCore.Functions.Notify(Lang:t('error.failed_to_start_procces'), 'error', 5000)
+-- K9 Functions
+function k9SearchVehicle(veh, activePed)
+    if not isModelK9(activePed.model) then
+        exports.qbx_core:Notify('This pet can not do that!', "error", 1500)
         return
     end
-    if pet_metadatarmation.type == 'init' then
-        TriggerEvent('keep-companion:client:openMenu_customization', {
-            item = item, pet_metadatarmation = pet_metadatarmation
-        })
+    if not PlayerJob then return end
+    if not (PlayerJob.name == 'police') then
+        exports.qbx_core:Notify('You are not allowed to do this action', "error", 1500)
         return
     end
-    local hasitem = QBCore.Functions.HasItem(Config.core_items.groomingkit.item_name)
 
-    if not hasitem then QBCore.Functions.Notify('you need grooming kit', 'error', 5000) return end
-    TriggerEvent('keep-companion:client:openMenu_customization', {
-        item = item, pet_metadatarmation = pet_metadatarmation
-    })
-end)
+    if not PlayerJob.onduty == true then
+        exports.qbx_core:Notify('You Must be on duty to do this action', "error", 1500)
+        return
+    end
 
-AddEventHandler('keep-companion:client:openMenu_customization', function(data)
-    openMenu_customization(data)
-end)
+    local coo = {
+        [1] = { offset = vector4(-1.5, 0.0, 0.0, -90.0) },
+        [2] = { offset = vector4(0.0, -2.8, 0.0, 0.0) },
+    }
 
-AddEventHandler('keep-companion:client:openMenu_customization_rename', function(data)
-    openMenu_customization_rename(data)
-end)
-
-local function rename(data)
-    local inputData = exports['qb-input']:ShowInput(
-        {
-            header = Lang:t('menu.customization_menu.rename.inputs.header'),
-            submitText = Lang:t('menu.general_menu_items.confirm'),
-            inputs = {
-                {
-                    type = 'text',
-                    isRequired = true,
-                    name = 'name',
-                    text = "name"
-                },
-            }
-        }
-    )
-    if inputData then
-        if not inputData.name then
-            return
-        end
-        local validation = ValidatePetName(inputData.name, 12)
-
-        if type(validation) == "table" and next(validation) ~= nil then
-            QBCore.Functions.Notify(Lang:t('error.failed_to_validate_name'), 'error', 5000)
-            if validation.reason == 'badword' then
-                QBCore.Functions.Notify(Lang:t('error.badword_inside_pet_name'), 'error', 5000)
-                print_table(validation.words)
-                TriggerEvent('keep-companion:client:openMenu_customization_rename', data)
-                return
-            elseif validation.reason == 'maxCharacter' then
-                QBCore.Functions.Notify(Lang:t('error.more_than_one_word_as_name'), 'error', 5000)
-                TriggerEvent('keep-companion:client:openMenu_customization_rename', data)
+    for key, value in pairs(coo) do
+        local vehHead = GetEntityHeading(veh)
+        local plate = GetVehicleNumberPlateText(veh)
+        local pos = GetOffsetFromEntityInWorldCoords(veh, value.offset.x, value.offset.y, value.offset.z)
+        TaskFollowNavMeshToCoord(activePed.entity, pos, 3.0, -1, 0.0, true, 0)
+        Wait(4000)
+        TaskAchieveHeading(activePed.entity, vehHead + value.offset.w, -1)
+        Wait(2000)
+        
+        lib.callback('keep-companion:server:search_vehicle', false, function(result)
+            if result then
+                SetAnimalMood(activePed.entity, 1)
+                PlayAnimalVocalization(activePed.entity, 3, 'bark')
+                Animator(activePed.entity, activePed.model, 'misc', {
+                    animation = 'indicate_high',
+                    sequentialTimings = {
+                        [1] = 6,
+                        [2] = 0,
+                        [3] = 2,
+                        step = 1,
+                        Timeout = 6
+                    }
+                })
                 return
             end
-            return
+            Animator(activePed.entity, activePed.model, 'siting', {
+                animation = 'sit',
+                sequentialTimings = {
+                    [1] = 6,
+                    [2] = 0,
+                    [3] = 2,
+                    step = 1,
+                    Timeout = 6
+                }
+            })
+        end, {
+            key = key,
+            plate = plate
+        })
+        Wait(3000)
+    end
+end
+
+function SearchLogic(plyped, activePed)
+    if not PlayerJob then return end
+    if not (PlayerJob.name == 'police') then
+        exports.qbx_core:Notify('You are not allowed to do this action', "error", 1500)
+        return
+    end
+
+    if not PlayerJob.onduty == true then
+        exports.qbx_core:Notify('You Must be on duty to do this action', "error", 1500)
+        return
+    end
+
+    ClearPedTasks(ActivePed.read().entity)
+    local pedCoord = GetEntityCoords(PlayerPedId())
+    local closestPlayer = QBCore.Functions.GetClosestPlayer(pedCoord)
+    if closestPlayer == -1 then
+        return
+    end
+    local pedplayer = GetPlayerPed(closestPlayer)
+    TaskGoToCoordAnyMeans(activePed.entity, GetEntityCoords(pedplayer), 10.0, 0, 0, 0, 0)
+
+    local finished = false
+    CreateThread(function()
+        while not finished do
+            Wait(5)
+            pedCoord = GetEntityCoords(GetPlayerPed(closestPlayer))
+            DrawMarker(2, pedCoord.x, pedCoord.y, pedCoord.z + 2, 0.0, 0.0, 0.0, 0.0, 180.0, 0.0, 1.0, 1.0,
+                1.0, 255, 128, 0, 50, false, true, 2, nil, nil, false)
         end
+    end)
 
-        data.item.metadata.name = inputData.name
-        TriggerEvent('keep-companion:client:openMenu_customization_rename', data)
-    end
+    local player_server_id = GetPlayerServerId(closestPlayer)
+    lib.callback('keep-companion:server:search_inventory', false, function(result)
+        Wait(5000)
+
+        Animator(activePed.entity, activePed.model, 'misc', {
+            animation = 'indicate_low',
+            sequentialTimings = {
+                [1] = 6,
+                [2] = 0,
+                [3] = 2,
+                step = 1,
+                Timeout = 6
+            }
+        })
+        Wait(5000)
+        if result == true then
+            exports.qbx_core:Notify('K9 found something', 'success', 2500)
+            SetAnimalMood(activePed.entity, 1)
+            PlayAnimalVocalization(activePed.entity, 3, 'bark')
+            Animator(activePed.entity, activePed.model, 'misc', {
+                animation = 'indicate_high',
+                sequentialTimings = {
+                    [1] = 6,
+                    [2] = 0,
+                    [3] = 2,
+                    step = 1,
+                    Timeout = 6
+                }
+            })
+        end
+        finished = true
+    end, player_server_id)
 end
 
-AddEventHandler('keep-companion:client:openMenu_customization_rename:rename', function(data)
-    rename(data)
-end)
-
-AddEventHandler('keep-companion:client:openMenu_customization_select_variation', function(data)
-    if data.selected ~= nil then
-        data.item.metadata.variation = data.selected
-    end
-    openMenu_customization_select_variation(data)
-end)
-
-local function change_variation(data)
-    local item = data.item
-    local pet_metadatarmation = data.pet_metadatarmation
-
-    local openMenu = {
-        {
-            header = Lang:t('menu.general_menu_items.btn_back'),
-            icon = 'fa-solid fa-angle-left',
-            params = {
-                event = "keep-companion:client:openMenu_customization_select_variation",
-                args = {
-                    item = item,
-                    pet_metadatarmation = pet_metadatarmation
-                }
-            }
-        },
-        {
-            header = Lang:t('menu.variation_menu.selection_menu.header'),
-            icon = 'fa-solid fa-rectangle-list',
-            isMenuHeader = true,
-            disabled = true
-        },
-    }
-
-    for key, value in pairs(pet_metadatarmation.pet_variation_list) do
-        openMenu[#openMenu + 1] = {
-            header = Lang:t('menu.variation_menu.selection_menu.btn_variation_items') .. value,
-            txt = Lang:t('menu.variation_menu.selection_menu.btn_desc'),
-            icon = 'fa-solid fa-brush',
-            params = {
-                event = "keep-companion:client:openMenu_customization_select_variation",
-                args = {
-                    selected = value,
-                    item = item,
-                    pet_metadatarmation = pet_metadatarmation
-                }
-            }
-        }
-    end
-
-    exports['qb-menu']:openMenu(openMenu)
+-- Keybind
+local function IsPoliceOrEMS()
+    return PlayerJob and (PlayerJob.name == "police" or PlayerJob.name == "ambulance")
 end
 
-AddEventHandler('keep-companion:client:openMenu_customization_variation:variation_menu', function(data)
-    change_variation(data)
-end)
-
--- customization menu
-function openMenu_customization(data)
-    -- header
-    local c_name = data.item.metadata.name
-    local c_variation = data.item.metadata.variation
-
-    local openMenu = {
-        {
-            header = Lang:t('menu.customization_menu.header'),
-            txt = Lang:t('menu.customization_menu.sub_header'),
-            icon = 'fa-solid fa-pen-to-square',
-            isMenuHeader = true
-        },
-        {
-            header = Lang:t('menu.customization_menu.btn_rename'),
-            txt = Lang:t('menu.customization_menu.btn_txt_btn_rename') .. c_name,
-            icon = 'fa-regular fa-keyboard',
-            disabled = data.pet_metadatarmation.disable.rename,
-            params = {
-                event = "keep-companion:client:openMenu_customization_rename",
-                args = {
-                    item = data.item,
-                    pet_metadatarmation = data.pet_metadatarmation
-                },
-            }
-        },
-        {
-            header = Lang:t('menu.customization_menu.btn_select_variation'),
-            txt = Lang:t('menu.customization_menu.btn_txt_select_variation') .. c_variation,
-            icon = 'fa-solid fa-brush',
-            params = {
-                event = "keep-companion:client:openMenu_customization_select_variation",
-                args = {
-                    item = data.item,
-                    pet_metadatarmation = data.pet_metadatarmation
-                },
-            }
-        },
-        {
-            header = Lang:t('menu.general_menu_items.confirm'),
-            icon = 'fa-solid fa-circle-check',
-            params = {
-                event = "keep-companion:client:openMenu_customization:confirm",
-                args = {
-                    item = data.item,
-                    pet_metadatarmation = data.pet_metadatarmation
-                }
-            }
-        },
-        {
-            header = Lang:t('menu.general_menu_items.btn_leave'),
-            txt = "",
-            icon = 'fa-solid fa-circle-xmark',
-            params = {
-                event = "qb-menu:closeMenu"
-            }
-        }
-    }
-
-    exports['qb-menu']:openMenu(openMenu)
+local function IsDowned()
+    return PlayerData and (PlayerData.metadata["isdead"] or PlayerData.metadata["inlaststand"])
 end
 
-function openMenu_customization_rename(data)
-    local item = data.item
-    local pet_metadatarmation = data.pet_metadatarmation
-    local c_name = item.metadata.name
-    -- header
-    local openMenu = {
-        {
-            header = Lang:t('menu.general_menu_items.btn_back'),
-            icon = 'fa-solid fa-angle-left',
-            params = {
-                event = "keep-companion:client:openMenu_customization",
-                args = {
-                    item = item,
-                    pet_metadatarmation = pet_metadatarmation
-                },
-            }
-        },
-        {
-            header = Lang:t('menu.rename_menu.header'),
-            icon = 'fa-solid fa-pen-to-square',
-            txt = c_name,
-            isMenuHeader = true,
-            disabled = true
-        },
-        {
-            header = Lang:t('menu.rename_menu.btn_rename'),
-            icon = 'fa-regular fa-keyboard',
-            params = {
-                event = "keep-companion:client:openMenu_customization_rename:rename",
-                args = {
-                    item = item,
-                    pet_metadatarmation = pet_metadatarmation
-                },
-            }
-        },
-    }
-
-    exports['qb-menu']:openMenu(openMenu)
+local function Ishandcuffed()
+    return PlayerData and PlayerData.metadata["ishandcuffed"]
 end
 
-function openMenu_customization_select_variation(data)
-    -- header
-    local item = data.item
-    local pet_metadatarmation = data.pet_metadatarmation
+lib.addKeybind({
+    name = 'petmenu',
+    description = 'Show pet menu',
+    defaultKey = Config.Settings.petMenuKeybind,
+    onPressed = function()
+        if ((IsDowned() and IsPoliceOrEMS()) or not IsDowned()) and not Ishandcuffed() and not IsPauseMenuActive() and not isMenuOpen then
+            local doesPlayerHavePet = ActivePed:read()
 
-    local openMenu = {
-        {
-            header = Lang:t('menu.general_menu_items.btn_back'),
-            icon = 'fa-solid fa-angle-left',
-            params = {
-                event = "keep-companion:client:openMenu_customization",
-                args = {
-                    item = item,
-                    pet_metadatarmation = pet_metadatarmation
-                }
-            }
-        },
-        {
-            header = Lang:t('menu.variation_menu.header'),
-            txt = item.metadata.variation,
-            icon = 'fa-solid fa-palette',
-            isMenuHeader = true,
-            disabled = true
-        },
-        {
-            header = Lang:t('menu.variation_menu.btn_select_variation'),
-            txt = Lang:t('menu.variation_menu.btn_txt_select_variation'),
-            icon = 'fa-solid fa-brush',
-            params = {
-                event = "keep-companion:client:openMenu_customization_variation:variation_menu",
-                args = {
-                    item = item,
-                    pet_metadatarmation = pet_metadatarmation
-                }
-            }
-        },
-    }
+            if doesPlayerHavePet == nil then
+                exports.qbx_core:Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
+                return
+            end
 
-    exports['qb-menu']:openMenu(openMenu)
-end
-
-AddEventHandler('keep-companion:client:openMenu_customization:confirm', function(data)
-    TriggerServerEvent('keep-companion:server:compelete_initialization_process', data.item, data.pet_metadatarmation.type)
-end)
+            showMainMenu()
+        end
+    end,
+})

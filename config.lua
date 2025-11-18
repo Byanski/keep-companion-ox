@@ -13,11 +13,11 @@ Config.Settings = {
     PetMiniMap = { showblip = true, sprite = 442, colour = 2, shortRange = false },
     chaseDistance = 50.0,
     chaseIndicator = true, -- huge marker on hunted target head
-    petMenuKeybind = 'o' -- keybind (players can change bind)
+    petMenuKeybind = 'O' -- keybind (players can change bind in settings > keybinds > FiveM)
 }
 
 Config.Balance = {
-    maximumLevel = 50, -- xp callculation only works util level 99 don't set it to higher values
+    maximumLevel = 50, -- xp calculation only works until level 99 don't set it to higher values
     afk = {
         -- 60-sec passed after the player is AFK pet will wander in area
         -- 100-sec after when the player is AFK pet will start doing animation
@@ -25,14 +25,13 @@ Config.Balance = {
         afkTimerRestAfter = 120, -- sec
         wanderingInterval = 60,
         animationInterval = 90
-    }, -- sec pet gonna go wandering around player after player is AFK for a certain time
+    },
 
     petting_stress_relief = math.random(12, 24)
 }
 
-
 -- distincts are needed for animations and to know if pet can hunt or not
--- in my testing generaly small animals can't hunt.
+-- in my testing generally small animals can't hunt.
 -- so potentially you won't need to change distinct value!
 -- distinct = "yes dog" ==> means this pet can hunt
 -- distinct = "no dog" ==> means this dog can't hunt
@@ -74,7 +73,6 @@ Config.pets = {
         maxHealth = 150,
         distinct = 'no dog'
     },
-
     [7] = {
         name = 'keepcompanionmtlion2',
         model = 'A_C_Panther',
@@ -185,9 +183,9 @@ Config.core_items = {
     }
 }
 
-
 -- K9 Settings
-Config.inventory_name = 'qb-inventory'
+Config.inventory_name = 'ox_inventory' -- Changed from 'qb-inventory' to 'ox_inventory'
+
 local illegal_items = {
     'weed_brick',
     'coke_small_brick',

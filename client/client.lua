@@ -1,25 +1,15 @@
-local CoreName = exports['qb-core']:GetCoreObject()
+local QBCore = exports['qb-core']:GetCoreObject()
 
 -- ============================
 --         Pet Class
 -- ============================
 ActivePed = {
-    data = {
-        -- model = '',
-        -- entity = '',
-        -- hostile = '',
-        -- lastCoord = '',
-        -- variation = '',
-        -- health = '',
-    },
+    data = {},
     onControl = -1
 }
--- itemData.name is item's name
--- itemData.metadata.name is pet's name
 
---- inital pet data
+--- initial pet data
 function ActivePed:new(model, hostile, item, ped, netId)
-    -- set modelString and canHunt
     local index = (#self.data + 1)
     if self.data[index] == nil then
         self.data[index] = {}
@@ -27,14 +17,13 @@ function ActivePed:new(model, hostile, item, ped, netId)
     else
         self.onControl = self.onControl + 1
     end
-    -- move onControll to last spawned pet
 
     self.data[index]['model'] = model
     self.data[index]['entity'] = ped
     self.data[index]['netId'] = netId
     self.data[index]['hostile'] = hostile
     self.data[index]['itemData'] = item
-    self.data[index]['lastCoord'] = GetEntityCoords(ped) -- if we don't have coord we know entity is missing
+    self.data[index]['lastCoord'] = GetEntityCoords(ped)
     self.data[index]['variation'] = item.metadata.variation
     self.data[index]['health'] = item.metadata.health
 
@@ -66,7 +55,7 @@ function ActivePed:remove(index)
     if not netId then return end
     TriggerServerEvent('keep-companion:server:ForceRemoveNetEntity', netId)
     self.data[index] = nil
-    -- assign onControl to valid value
+    
     if #self.data == 0 then
         self.onControl = -1
         return
@@ -120,7 +109,7 @@ function ActivePed:petsList()
             pedHandle = data.entity,
             itemData = {
                 metadata = {
-                    hash = data.itemData.metadata.hash -- used on ActivePed:removeAll()
+                    hash = data.itemData.metadata.hash
                 }
             }
         })
@@ -128,12 +117,7 @@ function ActivePed:petsList()
     return tmp
 end
 
-
-
-
-RegisterNetEvent('keep-companion:client:callCompanion')
-AddEventHandler('keep-companion:client:callCompanion', function(modelName, hostileTowardPlayer, item)
-    -- add another layer when player spawn it inside Vehicle
+RegisterNetEvent('keep-companion:client:callCompanion', function(modelName, hostileTowardPlayer, item)
     local model = (tonumber(modelName) ~= nil and tonumber(modelName) or GetHashKey(modelName))
     local plyPed = PlayerPedId()
     local ped = nil
@@ -142,26 +126,31 @@ AddEventHandler('keep-companion:client:callCompanion', function(modelName, hosti
 
     whistleAnimation(plyPed, 1500)
 
-    CoreName.Functions.Progressbar("callCompanion", "Calling companion", Config.Settings.callCompanionDuration * 1000,
-        false, false, {
-            disableMovement = false,
-            disableCarMovement = false,
-            disableMouse = false,
-            disableCombat = false
-        }, {}, {}, {}, function()
+    -- Use ox_lib progressbar instead of QBCore
+    if lib.progressBar({
+        duration = Config.Settings.callCompanionDuration * 1000,
+        label = 'Calling companion',
+        useWhileDead = false,
+        canCancel = false,
+        disable = {
+            move = false,
+            car = false,
+            mouse = false,
+            combat = false
+        }
+    }) then
         ClearPedTasks(plyPed)
 
         local spawnCoord = getSpawnLocation(plyPed)
         ped = CreateAPed(model, spawnCoord)
         local netId = NetworkGetNetworkIdFromEntity(ped)
+        
         QBCore.Functions.TriggerCallback('keep-companion:server:updatePedData', function(result)
             if hostileTowardPlayer == true then
-                -- if player is not owner of pet it will attack player
-                QBCore.Functions.Notify(Lang:t('error.not_owner_of_pet'), 'error', 5000)
+                exports.qbx_core:Notify(Lang:t('error.not_owner_of_pet'), 'error', 5000)
             end
             ClearPedTasks(ped)
             TaskFollowTargetedPlayer(ped, plyPed, 3.0, true)
-            -- -- add blip to entity
 
             if Config.Settings.PetMiniMap.showblip ~= nil and Config.Settings.PetMiniMap.showblip == true then
                 createBlip({
@@ -173,11 +162,9 @@ AddEventHandler('keep-companion:client:callCompanion', function(modelName, hosti
                 })
             end
 
-            -- init ped data inside client
             ActivePed:new(modelName, hostileTowardPlayer, item, ped, netId)
             local index, petData = ActivePed:findByHash(item.metadata.hash)
 
-            -- check for variation data
             if petData.itemData.metadata.variation ~= nil then
                 PetVariation:setPedVariation(ped, modelName, petData.itemData.metadata.variation)
             end
@@ -185,16 +172,15 @@ AddEventHandler('keep-companion:client:callCompanion', function(modelName, hosti
             SetEntityHealth(ped, math.floor(petData.itemData.metadata.health))
             local currentHealth = GetEntityHealth(ped)
 
-            exports['ox_target']:addEntity(netId, {
+            exports.ox_target:addLocalEntity(ped, {
                 {
                     icon = "fas fa-sack-dollar",
-                    label = "pet",
+                    label = "Pet",
                     canInteract = function(entity)
-                        return (IsEntityDead(entity) == false and ActivePed.read() ~= nil)
+                        return (not IsEntityDead(entity) and ActivePed.read() ~= nil)
                     end,
                     onSelect = function(data)
-                        entity = data.entity
-                        print(entity)
+                        local entity = data.entity
                         makeEntityFaceEntity(PlayerPedId(), entity)
                         makeEntityFaceEntity(entity, PlayerPedId())
 
@@ -216,49 +202,46 @@ AddEventHandler('keep-companion:client:callCompanion', function(modelName, hosti
                         TriggerServerEvent('hud:server:RelieveStress', Config.Balance.petting_stress_relief)
                         return true
                     end
-                }, {
+                },
+                {
                     icon = "fas fa-first-aid",
                     label = "Heal",
                     canInteract = function(entity)
-                        return (IsEntityDead(entity) == false and ActivePed.read() ~= nil)
+                        return (not IsEntityDead(entity) and ActivePed.read() ~= nil)
                     end,
                     onSelect = function(data)
-                        entity = data.entity
                         request_healing_process(ped, item, 'Heal')
                         return true
                     end
-                }, {
+                },
+                {
                     icon = "fas fa-first-aid",
-                    label = "revive pet",
+                    label = "Revive pet",
                     canInteract = function(entity)
-                        return (IsEntityDead(entity) == 1 and ActivePed.read() ~= nil)
+                        return (IsEntityDead(entity) and ActivePed.read() ~= nil)
                     end,
                     onSelect = function(data)
-                        entity = data.entity
-                        if not DoesEntityExist(entity) then
+                        if not DoesEntityExist(data.entity) then
                             return false
                         end
-
                         request_healing_process(ped, item, 'revive')
                         return true
                     end
-                }, {
+                },
+                {
                     icon = "fa-solid fa-flask",
                     label = "Drink from water bottle",
                     canInteract = function(entity)
-                        return (IsEntityDead(entity) ~= 1 and ActivePed.read() ~= nil)
+                        return (not IsEntityDead(entity) and ActivePed.read() ~= nil)
                     end,
                     onSelect = function(data)
-                        entity = data.entity
-                        if not DoesEntityExist(entity) then
+                        if not DoesEntityExist(data.entity) then
                             return false
                         end
-
                         start_drinking_animation(item)
                         return true
                     end
                 }
-
             })
 
             if petData.hostile == true then
@@ -272,12 +255,15 @@ AddEventHandler('keep-companion:client:callCompanion', function(modelName, hosti
         end, {
             item = item, model = model, entity = ped
         })
-    end)
+    end
 end)
 
 function request_healing_process(ped, item, process_type)
-    local hasitem = QBCore.Functions.HasItem(Config.core_items.firstaid.item_name)
-    if not hasitem then QBCore.Functions.Notify(Lang:t('error.not_enough_first_aid'), 'error', 5000) return end
+    local hasitem = exports.ox_inventory:Search('count', Config.core_items.firstaid.item_name)
+    if hasitem < 1 then 
+        exports.qbx_core:Notify(Lang:t('error.not_enough_first_aid'), 'error', 5000)
+        return 
+    end
 
     local plyID = PlayerPedId()
     local timeout = Config.core_items.firstaid.settings.duration
@@ -285,12 +271,12 @@ function request_healing_process(ped, item, process_type)
 
     if process_type == 'Heal' then
         timeout = timeout * math.floor(Config.core_items.firstaid.settings.healing_duration_multiplier)
-        makeEntityFaceEntity(ped, plyID) -- pet face owner
+        makeEntityFaceEntity(ped, plyID)
         TaskPause(ped, 5000)
     else
         timeout = timeout * math.floor(Config.core_items.firstaid.settings.revive_duration_multiplier)
     end
-    makeEntityFaceEntity(plyID, ped) -- owner face pet
+    makeEntityFaceEntity(plyID, ped)
 
     Animator(plyID, "PLAYER", 'revive', {
         animation = 'tendtodead',
@@ -302,72 +288,69 @@ function request_healing_process(ped, item, process_type)
             Timeout = timeout
         }
     })
-    -- firstaidforpet
-    CoreName.Functions.Progressbar("reviveing", "Reviveing",
-        timeout * 1000, false, false, {
-            disableMovement = true,
-            disableCarMovement = true,
-            disableMouse = false,
-            disableCombat = true
-        }, {}, {}, {}, function()
+
+    if lib.progressBar({
+        duration = timeout * 1000,
+        label = 'Reviving',
+        useWhileDead = false,
+        canCancel = false,
+        disable = {
+            move = true,
+            car = true,
+            mouse = false,
+            combat = true
+        }
+    }) then
         TriggerServerEvent('keep-companion:server:revivePet', current_pet, process_type)
         TaskFollowTargetedPlayer(ped, plyID, false)
-    end)
+    end
 end
 
 RegisterNetEvent('keep-companion:client:update_health_value', function(item, amount)
     SetEntityHealth(item.entity, math.floor(amount))
 end)
 
-
---- when the player is AFK for a certain time pet will wander around
----@param timeOut table
----@param afk number
 local function afkWandering(timeOut, afk, plyPed, ped)
     local coord = GetEntityCoords(plyPed)
-    if IsPedStopped(plyPed) and IsPedInAnyVehicle(plyPed) == false then
+    if IsPedStopped(plyPed) and not IsPedInAnyVehicle(plyPed) then
         if timeOut[1] < afk.afkTimerRestAfter then
             timeOut[1] = timeOut[1] + 1
-            -- code here
+            
             if timeOut[1] == afk.wanderingInterval then
                 if timeOut.lastAction == nil or (timeOut.lastAction ~= nil and timeOut.lastAction == 'animation') then
-                    ClearPedTasks(ped) -- clear last animation
+                    ClearPedTasks(ped)
                     TaskWanderInArea(ped, coord, 4.0, 2, 8.0)
                     timeOut.lastAction = 'wandering'
                 end
             end
             if timeOut[1] == afk.animationInterval then
-                ClearPedTasks(ped) -- clear TaskWanderInArea
+                ClearPedTasks(ped)
                 Animator(ped, ActivePed:read().model, 'siting')
                 timeOut.lastAction = 'animation'
             end
         else
-            timeOut[1] = 0 --
+            timeOut[1] = 0
         end
     else
         timeOut[1] = 0
     end
 end
 
---- this set of Functions will executed evetry sec to tracker pet's behaviour.
----@param ped any
 function creatActivePetThread(ped, item)
     local afk = Config.Balance.afk
-    local count = Config.DataUpdateInterval -- this value is
+    local count = Config.DataUpdateInterval
     local plyPed = PlayerPedId()
     CreateThread(function()
         local tmpcount = 0
         local savedData = ActivePed.data[ActivePed:findByHash(item.metadata.hash)]
-        local fninished = false
-        -- it's table just to have passed by reference.
+        local finished = false
         local timeOut = {
             0,
             lastAction = nil
         }
-        while DoesEntityExist(ped) and fninished == false do
+        while DoesEntityExist(ped) and not finished do
             afkWandering(timeOut, afk, plyPed, ped)
 
-            -- update every 10 sec
             if tmpcount >= count then
                 local activeped = savedData
                 local currentItem = {
@@ -383,12 +366,9 @@ function creatActivePetThread(ped, item)
             end
             tmpcount = tmpcount + 1
 
-            -- update health
             local currentHealth = GetEntityHealth(savedData.entity)
-            if IsPedDeadOrDying(savedData.entity) == false and savedData.maxHealth ~= currentHealth and
-                savedData.health ~=
-                currentHealth then
-                -- ped is still alive
+            if not IsPedDeadOrDying(savedData.entity) and savedData.maxHealth ~= currentHealth and
+                savedData.health ~= currentHealth then
                 TriggerServerEvent('keep-companion:server:updateAllowedInfo', {
                     hash = savedData.itemData.metadata.hash,
                     slot = savedData.itemData.slot
@@ -398,8 +378,8 @@ function creatActivePetThread(ped, item)
                 })
                 savedData.health = currentHealth
             end
-            -- pet is died
-            if IsPedDeadOrDying(savedData.entity) == 1 then
+            
+            if IsPedDeadOrDying(savedData.entity) then
                 local c_health = GetEntityHealth(savedData.entity)
 
                 if c_health <= 100 then
@@ -410,7 +390,7 @@ function creatActivePetThread(ped, item)
                         key = 'health',
                         netId = NetworkGetNetworkIdFromEntity(ped),
                     })
-                    fninished = true
+                    finished = true
                 end
             end
             Wait(1000)
@@ -428,13 +408,11 @@ RegisterNetEvent('keep-companion:client:forceKill', function(hash, reason)
     SetEntityHealth(petData.entity, 0)
     local msg = Lang:t('error.your_pet_died_by')
     msg = string.format(msg, reason)
-    QBCore.Functions.Notify(msg, 'error', 5000)
+    exports.qbx_core:Notify(msg, 'error', 5000)
 end)
 
-RegisterNetEvent('keep-companion:client:despawn')
-AddEventHandler('keep-companion:client:despawn', function(item, revive)
+RegisterNetEvent('keep-companion:client:despawn', function(item, revive)
     if revive ~= nil and revive == true then
-        -- revive skip animation
         local index, pedData = ActivePed:findByHash(item.metadata.hash)
         ActivePed:remove(index)
         TriggerServerEvent('keep-companion:server:setAsDespawned', item)
@@ -446,24 +424,27 @@ AddEventHandler('keep-companion:client:despawn', function(item, revive)
     ClearPedTasks(plyPed)
     whistleAnimation(plyPed, 1500)
 
-    CoreName.Functions.Progressbar("despawn", "despawning", Config.Settings.despawnDuration * 1000, false, false, {
-        disableMovement = false,
-        disableCarMovement = false,
-        disableMouse = false,
-        disableCombat = false
-    }, {}, {}, {}, function()
+    if lib.progressBar({
+        duration = Config.Settings.despawnDuration * 1000,
+        label = 'Despawning',
+        useWhileDead = false,
+        canCancel = false,
+        disable = {
+            move = false,
+            car = false,
+            mouse = false,
+            combat = false
+        }
+    }) then
         ClearPedTasks(plyPed)
-        Citizen.CreateThread(function()
-            local index, pedData = ActivePed:findByHash(item.metadata.hash)
-            ActivePed:remove(index)
-            TriggerServerEvent('keep-companion:server:setAsDespawned', item)
-        end)
-    end)
+        local index, pedData = ActivePed:findByHash(item.metadata.hash)
+        ActivePed:remove(index)
+        TriggerServerEvent('keep-companion:server:setAsDespawned', item)
+    end
 end)
 
 RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
     ActivePed:removeAll()
-    PlayerData = {} -- empty playerData
 end)
 
 -- =========================================
@@ -474,197 +455,191 @@ RegisterNetEvent('keep-companion:client:start_feeding_animation', function()
     local current_pet = ActivePed:read()
 
     if current_pet == nil then
-        QBCore.Functions.Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
+        exports.qbx_core:Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
         return
     end
 
     local c_health = GetEntityHealth(current_pet.entity)
     if c_health <= 100.0 or current_pet.itemData.metadata.health <= 100.0 then
-        QBCore.Functions.Notify(Lang:t('error.your_pet_is_dead'), 'error', 5000)
+        exports.qbx_core:Notify(Lang:t('error.your_pet_is_dead'), 'error', 5000)
         return
     end
 
-    CoreName.Functions.Progressbar("feeding", "Feeding", Config.core_items.food.settings.duration * 1000, false, false,
-        {
-            disableMovement = false,
-            disableCarMovement = false,
-            disableMouse = false,
-            disableCombat = false
-        }, {}, {}, {}, function()
+    if lib.progressBar({
+        duration = Config.core_items.food.settings.duration * 1000,
+        label = 'Feeding',
+        useWhileDead = false,
+        canCancel = false,
+        disable = {
+            move = false,
+            car = false,
+            mouse = false,
+            combat = false
+        }
+    }) then
         TriggerServerEvent('keep-companion:server:increaseFood', current_pet.itemData)
-    end)
-end)
-
-RegisterNetEvent('keep-companion:client:', function()
-
+    end
 end)
 
 function start_drinking_animation()
     local current_pet = ActivePed:read()
 
     if current_pet == nil then
-        QBCore.Functions.Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
+        exports.qbx_core:Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
         return
     end
 
     local c_health = GetEntityHealth(current_pet.entity)
     if c_health <= 100.0 or current_pet.itemData.metadata.health <= 100.0 then
-        QBCore.Functions.Notify(Lang:t('error.your_pet_is_dead'), 'error', 5000)
+        exports.qbx_core:Notify(Lang:t('error.your_pet_is_dead'), 'error', 5000)
         return
     end
 
-    CoreName.Functions.Progressbar("pet_drinking", "drinking", Config.core_items.waterbottle.settings.duration * 1000,
-        false, false, {
-            disableMovement = false,
-            disableCarMovement = false,
-            disableMouse = false,
-            disableCombat = false
-        }, {}, {}, {}, function()
-        QBCore.Functions.TriggerCallback('keep-companion:server:decrease_thirst', function(result)
-
+    if lib.progressBar({
+        duration = Config.core_items.waterbottle.settings.duration * 1000,
+        label = 'Drinking',
+        useWhileDead = false,
+        canCancel = false,
+        disable = {
+            move = false,
+            car = false,
+            mouse = false,
+            combat = false
+        }
+    }) then
+        lib.callback('keep-companion:server:decrease_thirst', false, function(result)
         end, current_pet.itemData)
-    end)
+    end
 end
 
 RegisterNetEvent('keep-companion:client:filling_animation', function(item)
-    CoreName.Functions.Progressbar("filling_animation", "filling bottle",
-        Config.core_items.waterbottle.settings.duration * 1000, false, false, {
-            disableMovement = false,
-            disableCarMovement = false,
-            disableMouse = false,
-            disableCombat = false
-        }, {}, {}, {}, function()
+    if lib.progressBar({
+        duration = Config.core_items.waterbottle.settings.duration * 1000,
+        label = 'Filling bottle',
+        useWhileDead = false,
+        canCancel = false,
+        disable = {
+            move = false,
+            car = false,
+            mouse = false,
+            combat = false
+        }
+    }) then
         TriggerServerEvent('keep-companion:server:filling_event', item)
-    end)
+    end
 end)
 
 RegisterNetEvent('keep-companion:client:rename_name_tag', function(item)
     if ActivePed:read() == nil then
-        QBCore.Functions.Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
+        exports.qbx_core:Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
         return
     end
 
-    local name = exports['qb-input']:ShowInput({
-        header = "rename: " .. ActivePed:read().itemData.metadata.name,
-        submitText = "rename",
-        inputs = { {
-            type = 'text',
-            isRequired = true,
-            name = 'pet_name',
-            text = "enter pet name"
-        } }
+    local input = lib.inputDialog('Rename: ' .. ActivePed:read().itemData.metadata.name, {
+        {type = 'input', label = 'Pet Name', required = true, max = 12}
     })
-    if name then
-        if not name.pet_name then
-            return
-        end
-        TriggerServerEvent('keep-companion:server:rename_name_tag', name.pet_name)
+
+    if input then
+        TriggerServerEvent('keep-companion:server:rename_name_tag', input[1])
     end
 end)
 
-
-
 RegisterNetEvent('keep-companion:client:rename_name_tagAction', function(name)
-    -- process of updating pet's name
     local activePed = ActivePed:read() or nil
     local validation = ValidatePetName(name, 12)
 
     if activePed == nil then
-        QBCore.Functions.Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
+        exports.qbx_core:Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
         return
     end
 
     if activePed.itemData.metadata.hash == nil or type(name) ~= "string" then
-        QBCore.Functions.Notify(Lang:t('error.failed_to_start_procces'), 'error', 5000)
+        exports.qbx_core:Notify(Lang:t('error.failed_to_start_procces'), 'error', 5000)
         return
     end
 
     if type(validation) == "table" and next(validation) ~= nil then
-        QBCore.Functions.Notify(Lang:t('error.failed_to_validate_name'), 'error', 5000)
+        exports.qbx_core:Notify(Lang:t('error.failed_to_validate_name'), 'error', 5000)
         if validation.reason == 'badword' then
-            QBCore.Functions.Notify(Lang:t('error.badword_inside_pet_name'), 'error', 5000)
-            print_table(validation.words)
+            exports.qbx_core:Notify(Lang:t('error.badword_inside_pet_name'), 'error', 5000)
             return
         elseif validation.reason == 'maxCharacter' then
-            QBCore.Functions.Notify(Lang:t('error.more_than_one_word_as_name'), 'error', 5000)
+            exports.qbx_core:Notify(Lang:t('error.more_than_one_word_as_name'), 'error', 5000)
             return
         end
         return
     end
 
-    CoreName.Functions.Progressbar("waitingForName", "waiting for Name",
-        Config.core_items.nametag.settings.duration * 1000, false, false, {
-            disableMovement = false,
-            disableCarMovement = false,
-            disableMouse = false,
-            disableCombat = true
-        }, {}, {}, {}, function()
-        QBCore.Functions.TriggerCallback('keep-companion:server:renamePet', function(result)
+    if lib.progressBar({
+        duration = Config.core_items.nametag.settings.duration * 1000,
+        label = 'Waiting for Name',
+        useWhileDead = false,
+        canCancel = false,
+        disable = {
+            move = false,
+            car = false,
+            mouse = false,
+            combat = true
+        }
+    }) then
+        lib.callback('keep-companion:server:renamePet', false, function(result)
             if type(result) == "string" then
-                QBCore.Functions.Notify(Lang:t('success.pet_rename_was_successful') .. result, 'success', 5000)
+                exports.qbx_core:Notify(Lang:t('success.pet_rename_was_successful') .. result, 'success', 5000)
             end
         end, {
             hash = activePed.itemData.metadata.hash or nil,
             slot = activePed.itemData.slot or nil,
             name = name
         })
-    end)
+    end
 end)
 
 RegisterNetEvent('keep-companion:client:collar_process', function()
-    -- process of updating pet's owernship
     local activePed = ActivePed:read() or nil
 
     if activePed == nil then
-        QBCore.Functions.Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
+        exports.qbx_core:Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
         return
     end
 
     if activePed.itemData.metadata.hash == nil then
-        QBCore.Functions.Notify(Lang:t('error.failed_to_find_pet'), 'error', 5000)
+        exports.qbx_core:Notify(Lang:t('error.failed_to_find_pet'), 'error', 5000)
         return
     end
 
-    local inputData = exports['qb-input']:ShowInput({
-        header = "New owner id: ",
-        submitText = "Confirm",
-        inputs = {
-            {
-                type = 'number',
-                isRequired = true,
-                name = 'cid',
-                text = "new owner id"
-            },
-        }
+    local input = lib.inputDialog('New Owner ID', {
+        {type = 'number', label = 'Owner ID', required = true}
     })
-    if inputData then
-        if not inputData.cid then
-            return
-        end
-        CoreName.Functions.Progressbar("waitingForOwenership", "waiting for new owner",
-            Config.core_items.collar.settings.duration * 1000, false, false, {
-                disableMovement = false,
-                disableCarMovement = false,
-                disableMouse = false,
-                disableCombat = true
-            }, {}, {}, {},
-            function()
-                local c_pet = ActivePed:read()
-                if c_pet == nil then
-                    QBCore.Functions.Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
+
+    if input then
+        if lib.progressBar({
+            duration = Config.core_items.collar.settings.duration * 1000,
+            label = 'Waiting for new owner',
+            useWhileDead = false,
+            canCancel = false,
+            disable = {
+                move = false,
+                car = false,
+                mouse = false,
+                combat = true
+            }
+        }) then
+            local c_pet = ActivePed:read()
+            if c_pet == nil then
+                exports.qbx_core:Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
+                return
+            end
+            
+            lib.callback('keep-companion:server:collar_change_owenership', false, function(result)
+                if result.state == false then
+                    exports.qbx_core:Notify(result.msg, 'error', 5000)
                     return
                 end
-                QBCore.Functions.TriggerCallback('keep-companion:server:collar_change_owenership', function(result)
-                    if result.state == false then
-                        QBCore.Functions.Notify(result.msg, 'error', 5000)
-                        return
-                    end
-                    QBCore.Functions.Notify(result.msg, 'success', 5000)
-                end, {
-                    new_owner_cid = inputData.cid,
-                    hash = ActivePed:read().itemData.metadata.hash,
-                })
-            end
-        )
+                exports.qbx_core:Notify(result.msg, 'success', 5000)
+            end, {
+                new_owner_cid = input[1],
+                hash = ActivePed:read().itemData.metadata.hash,
+            })
+        end
     end
 end)
