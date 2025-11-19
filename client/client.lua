@@ -10,16 +10,22 @@ ActivePed = {
 
 --- initial pet data
 function ActivePed:new(model, hostile, item, ped, netId)
-    local index = (#self.data + 1)
+    -- Find next available index
+    local index = 1
+    for i = 1, 999 do
+        if not self.data[i] then
+            index = i
+            break
+        end
+    end
     
     print('[Keep-Companion] Creating new ActivePed | Index: ' .. index .. ' | Model: ' .. model .. ' | Hash: ' .. (item.metadata.hash or 'NO_HASH'))
     
-    if self.data[index] == nil then
-        self.data[index] = {}
-        self.onControl = index
-    else
-        self.onControl = self.onControl + 1
-    end
+    -- Initialize the table
+    self.data[index] = {}
+    
+    -- Set this as the controlled pet
+    self.onControl = index
 
     self.data[index]['model'] = model
     self.data[index]['entity'] = ped
@@ -41,10 +47,13 @@ function ActivePed:new(model, hostile, item, ped, netId)
                     self.data[index]['canHunt'] = false
                 end
             end
-            print('[Keep-Companion] ActivePed created successfully | onControl: ' .. self.onControl)
-            return
+            print('[Keep-Companion] ActivePed created successfully | onControl: ' .. self.onControl .. ' | Total pets: ' .. self:getTotalPets())
+            return true
         end
     end
+    
+    print('[Keep-Companion] ERROR: Pet model not found in config: ' .. item.name)
+    return false
 end
 
 --- return current active pet
@@ -125,6 +134,14 @@ function ActivePed:petsList()
     return tmp
 end
 
+function ActivePed:getTotalPets()
+    local count = 0
+    for _ in pairs(self.data) do
+        count = count + 1
+    end
+    return count
+end
+
 RegisterNetEvent('keep-companion:client:callCompanion', function(modelName, hostileTowardPlayer, item)
     local model = (tonumber(modelName) ~= nil and tonumber(modelName) or GetHashKey(modelName))
     local plyPed = PlayerPedId()
@@ -178,13 +195,23 @@ RegisterNetEvent('keep-companion:client:callCompanion', function(modelName, host
             end
 
             ActivePed:new(modelName, hostileTowardPlayer, item, ped, netId)
+            
+            -- Wait a frame to ensure data is set
+            Wait(100)
+            
             local index, petData = ActivePed:findByHash(item.metadata.hash)
             
             if not petData then
+                print('[Keep-Companion] ERROR: Failed to find pet after creation')
+                print('[Keep-Companion] Looking for hash: ' .. item.metadata.hash)
+                print('[Keep-Companion] onControl is: ' .. ActivePed.onControl)
+                print('[Keep-Companion] Total pets: ' .. ActivePed:getTotalPets())
                 exports.qbx_core:Notify('Failed to initialize pet data', 'error', 5000)
                 DeletePed(ped)
                 return
             end
+            
+            print('[Keep-Companion] Pet found! Index: ' .. index .. ' | Name: ' .. petData.itemData.metadata.name)
 
             if petData.itemData.metadata.variation ~= nil then
                 PetVariation:setPedVariation(ped, modelName, petData.itemData.metadata.variation)
@@ -192,6 +219,8 @@ RegisterNetEvent('keep-companion:client:callCompanion', function(modelName, host
             SetEntityMaxHealth(ped, petData.maxHealth)
             SetEntityHealth(ped, math.floor(petData.itemData.metadata.health))
             local currentHealth = GetEntityHealth(ped)
+            
+            print('[Keep-Companion] Pet health set: ' .. currentHealth .. '/' .. petData.maxHealth)
 
             exports.ox_target:addLocalEntity(ped, {
                 {
@@ -265,14 +294,14 @@ RegisterNetEvent('keep-companion:client:callCompanion', function(modelName, host
                 }
             })
 
-            if petData.hostile == true then
-                TriggerServerEvent('keep-companion:server:despwan_not_owned_pet', petData.itemData.metadata.hash)
-                return
-            end
-
             if currentHealth > 100 then
+                print('[Keep-Companion] Starting pet thread for hash: ' .. item.metadata.hash)
                 creatActivePetThread(ped, item)
+            else
+                print('[Keep-Companion] Pet health too low, not starting thread')
             end
+            
+            print('[Keep-Companion] Pet spawn complete!')
         end, {
             item = item, model = model, entity = ped
         })
