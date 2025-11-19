@@ -144,6 +144,11 @@ function CreateAPed(hash, pos)
     SetPedCombatAttributes(ped, 0, true)   -- Can use cover
     SetPedCombatAttributes(ped, 5, true)   -- Can do drivebys
     SetPedCombatAttributes(ped, 17, true)  -- Always fight
+    SetPedCombatAttributes(ped, 20, true)  -- Aggressive
+    
+    -- Give the pet a "weapon" (melee) to actually deal damage
+    GiveWeaponToPed(ped, GetHashKey("WEAPON_ANIMAL"), 1, false, true)
+    SetPedCurrentWeaponVisible(ped, false, false, false, false)
     
     SetModelAsNoLongerNeeded(ped)
     return ped
@@ -327,16 +332,50 @@ function attackLogic(alreadyHunting)
                 -- Attack the target
                 AttackTargetedPed(pet, entity)
                 
-                -- Monitor the attack
+                -- Monitor the attack and add manual damage if needed
                 CreateThread(function()
+                    local damageTimer = 0
+                    local attackStarted = GetGameTimer()
+                    
                     while not IsPedDeadOrDying(entity, false) do
                         Wait(500)
                         local pedCoord = GetEntityCoords(entity)
                         local petCoord = GetEntityCoords(pet)
                         local distance = GetDistanceBetweenCoords(pedCoord, petCoord, true)
 
+                        -- Check if too far
                         if distance >= chaseDistance then
                             exports.qbx_core:Notify('Target escaped', 'error', 2000)
+                            alreadyHunting.state = false
+                            ClearPedTasks(pet)
+                            TaskFollowToOffsetOfEntity(pet, plyped, 2.5, 2.5, 2.5, 5.0, -1, 3.0, true)
+                            return
+                        end
+                        
+                        -- If pet is close enough and attacking, apply damage manually
+                        if distance < 2.0 then
+                            damageTimer = damageTimer + 500
+                            
+                            -- Apply damage every 2 seconds
+                            if damageTimer >= 2000 then
+                                local currentHealth = GetEntityHealth(entity)
+                                local newHealth = currentHealth - 20 -- 20 damage every 2 seconds
+                                
+                                if newHealth <= 100 then
+                                    newHealth = 0
+                                end
+                                
+                                SetEntityHealth(entity, newHealth)
+                                damageTimer = 0
+                                
+                                -- Play attack animation sound effect
+                                PlayPain(entity, 7, 0)
+                            end
+                        end
+                        
+                        -- Timeout after 30 seconds
+                        if GetGameTimer() - attackStarted > 30000 then
+                            exports.qbx_core:Notify('Attack timed out', 'error', 2000)
                             alreadyHunting.state = false
                             ClearPedTasks(pet)
                             TaskFollowToOffsetOfEntity(pet, plyped, 2.5, 2.5, 2.5, 5.0, -1, 3.0, true)
@@ -595,22 +634,49 @@ function AttackTargetedPed(AttackerPed, targetPed)
         return false
     end
     
-    -- Enable AI and combat
+    -- Clear any existing tasks first
+    ClearPedTasks(AttackerPed)
+    ClearPedSecondaryTask(AttackerPed)
+    
+    -- Set up aggressive relationships
+    local playerGroup = GetPedRelationshipGroupHash(PlayerPedId())
+    local targetGroup = GetPedRelationshipGroupHash(targetPed)
+    
+    -- Make target an enemy
+    SetRelationshipBetweenGroups(5, playerGroup, targetGroup)
+    SetRelationshipBetweenGroups(5, targetGroup, playerGroup)
+    
+    -- Enable full AI and combat capabilities
     SetBlockingOfNonTemporaryEvents(AttackerPed, false)
     SetPedFleeAttributes(AttackerPed, 0, false)
-    SetPedCombatAttributes(AttackerPed, 46, true)  -- Can use cover
-    SetPedCombatAttributes(AttackerPed, 5, true)   -- Can fight armed
-    SetPedCombatAttributes(AttackerPed, 17, true)  -- Always fight
+    SetPedCombatAttributes(AttackerPed, 46, true)   -- Can use cover
+    SetPedCombatAttributes(AttackerPed, 0, true)    -- Use cover
+    SetPedCombatAttributes(AttackerPed, 2, true)    -- Can use vehicles
+    SetPedCombatAttributes(AttackerPed, 3, true)    -- Can leave vehicle
+    SetPedCombatAttributes(AttackerPed, 5, true)    -- Can fight armed peds when not armed
+    SetPedCombatAttributes(AttackerPed, 17, true)   -- Always fight
+    SetPedCombatAttributes(AttackerPed, 20, true)   -- Aggressive
+    SetPedCombatAttributes(AttackerPed, 1424, true) -- Ignore all
+    
     SetPedCombatMovement(AttackerPed, 3)  -- Aggressive movement
+    SetPedCombatRange(AttackerPed, 2)      -- Medium range
     SetPedKeepTask(AttackerPed, true)
+    SetPedAlertness(AttackerPed, 3)        -- Maximum alertness
     
-    -- Set relationship to attack
-    SetRelationshipBetweenPed(AttackerPed)
+    -- Make the target flee or fight back
+    SetPedFleeAttributes(targetPed, 0, false)
     
-    -- Clear any existing tasks
-    ClearPedTasks(AttackerPed)
+    -- Register the target as a hated target
+    RegisterHatedTargetsAroundPed(AttackerPed, 500.0)
     
-    -- Give attack tasks
+    -- Give multiple combat tasks to ensure engagement
     TaskCombatPed(AttackerPed, targetPed, 0, 16)
-    TaskGoToEntity(AttackerPed, targetPed, -1, 1.0, 3.0, 1073741824, 0)
+    
+    -- Also add a melee task as backup
+    CreateThread(function()
+        Wait(500)
+        if DoesEntityExist(AttackerPed) and DoesEntityExist(targetPed) then
+            TaskCombatPed(AttackerPed, targetPed, 0, 16)
+        end
+    end)
 end
