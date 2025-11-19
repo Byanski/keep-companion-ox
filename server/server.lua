@@ -588,7 +588,7 @@ CreateThread(function()
     end
 end)
 
-lib.callback.register('keep-companion:server:updatePedData', function(source, clientRes)
+--[[lib.callback.register('keep-companion:server:updatePedData', function(source, clientRes)
     local player = QBCore.Functions.GetPlayer(source)
     if player == nil then
         print('[Keep-Companion] ERROR: Player is nil for source: ' .. source)
@@ -609,6 +609,31 @@ lib.callback.register('keep-companion:server:updatePedData', function(source, cl
     
     print('[Keep-Companion] ERROR: Failed to set pet as spawned')
     return false
+end)]]--
+
+QBCore.Functions.CreateCallback('keep-companion:server:updatePedData', function(source, cb, clientRes)
+    local player = QBCore.Functions.GetPlayer(source)
+    if player == nil then
+        print('[Keep-Companion] ERROR: Player is nil for source: ' .. source)
+        cb(false)
+        return
+    end
+    
+    if not clientRes or not clientRes.item or not clientRes.item.metadata then
+        print('[Keep-Companion] ERROR: Invalid client response data')
+        cb(false)
+        return
+    end
+    
+    print('[Keep-Companion] Registering pet for player: ' .. source .. ' | Hash: ' .. (clientRes.item.metadata.hash or 'NO_HASH'))
+    
+    if Pet:setAsSpawned(source, clientRes) then
+        print('[Keep-Companion] Pet successfully registered')
+        cb(true)
+    else
+        print('[Keep-Companion] ERROR: Failed to set pet as spawned')
+        cb(false)
+    end
 end)
 
 RegisterNetEvent('keep-companion:server:onPlayerUnload', function(items)
