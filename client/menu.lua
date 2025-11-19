@@ -29,6 +29,15 @@ local function isModelK9(model)
     return false
 end
 
+-- Forward declare menu functions
+local showMainMenu
+local showActionMenu
+local showTricksMenu
+local showSwitchControlMenu
+local showCustomizationMenu
+local showRenameMenu
+local showVariationMenu
+
 -- action menu
 local menu = {
     [1] = {
@@ -185,6 +194,8 @@ end
 RegisterNetEvent('keep-companion:client:actionMenuDispatcher', function(option)
     local plyped = PlayerPedId()
     local activePed = ActivePed.read()
+    if not activePed then return end
+    
     activePed.entity = NetworkGetEntityFromNetworkId(activePed.netId)
     for key, values in pairs(option.menu) do
         if option.type == values.TYPE then
@@ -218,10 +229,107 @@ function get_correct_icon(model)
     return 'cat'
 end
 
+-- Define menu functions
+showRenameMenu = function(data)
+    local input = lib.inputDialog('Rename Pet', {
+        {type = 'input', label = 'Pet Name', required = true, max = 12, default = data.item.metadata.name}
+    })
+    
+    if input and input[1] then
+        local validation = ValidatePetName(input[1], 12)
+        
+        if type(validation) == "table" and next(validation) ~= nil then
+            exports.qbx_core:Notify(Lang:t('error.failed_to_validate_name'), 'error', 5000)
+            if validation.reason == 'badword' then
+                exports.qbx_core:Notify(Lang:t('error.badword_inside_pet_name'), 'error', 5000)
+            elseif validation.reason == 'maxCharacter' then
+                exports.qbx_core:Notify(Lang:t('error.more_than_one_word_as_name'), 'error', 5000)
+            end
+            return
+        end
+        
+        data.item.metadata.name = input[1]
+        showCustomizationMenu(data)
+    else
+        showCustomizationMenu(data)
+    end
+end
+
+showVariationMenu = function(data)
+    local options = {}
+    
+    for key, value in pairs(data.pet_information.pet_variation_list) do
+        table.insert(options, {
+            title = 'Variation: ' .. value,
+            icon = 'brush',
+            onSelect = function()
+                data.item.metadata.variation = value
+                showCustomizationMenu(data)
+            end
+        })
+    end
+    
+    lib.registerContext({
+        id = 'pet_variation_menu',
+        title = Lang:t('menu.variation_menu.header'),
+        menu = 'pet_customization_menu',
+        options = options
+    })
+    
+    lib.showContext('pet_variation_menu')
+end
+
+showCustomizationMenu = function(data)
+    local c_name = data.item.metadata.name
+    local c_variation = data.item.metadata.variation
+    
+    local options = {}
+    
+    -- Only add rename option if not disabled
+    if not data.pet_information.disable.rename then
+        table.insert(options, {
+            title = Lang:t('menu.customization_menu.btn_rename'),
+            description = Lang:t('menu.customization_menu.btn_txt_btn_rename') .. c_name,
+            icon = 'keyboard',
+            onSelect = function()
+                showRenameMenu(data)
+            end
+        })
+    end
+    
+    table.insert(options, {
+        title = Lang:t('menu.customization_menu.btn_select_variation'),
+        description = Lang:t('menu.customization_menu.btn_txt_select_variation') .. c_variation,
+        icon = 'brush',
+        onSelect = function()
+            showVariationMenu(data)
+        end
+    })
+    
+    table.insert(options, {
+        title = Lang:t('menu.general_menu_items.confirm'),
+        icon = 'circle-check',
+        onSelect = function()
+            TriggerServerEvent('keep-companion:server:compelete_initialization_process', data.item, data.pet_information.type)
+        end
+    })
+    
+    lib.registerContext({
+        id = 'pet_customization_menu',
+        title = Lang:t('menu.customization_menu.header'),
+        options = options
+    })
+    
+    lib.showContext('pet_customization_menu')
+end
+
 -- Main Menu using ox_lib
-local function showMainMenu()
+showMainMenu = function()
     local activePet = ActivePed.read()
-    if not activePet then return end
+    if not activePet then 
+        exports.qbx_core:Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
+        return 
+    end
     
     local name = activePet.itemData.metadata.name
     local model = activePet.model
@@ -252,7 +360,7 @@ local function showMainMenu()
 end
 
 -- Action Menu
-local function showActionMenu()
+showActionMenu = function()
     local activePet = ActivePed.read()
     if not activePet then return end
     
@@ -268,7 +376,7 @@ local function showActionMenu()
         
         table.insert(options, {
             title = value.lable,
-            icon = key,
+            icon = tostring(key),
             onSelect = function()
                 TriggerEvent('keep-companion:client:actionMenuDispatcher', {
                     type = value.TYPE,
@@ -299,7 +407,7 @@ local function showActionMenu()
 end
 
 -- Tricks Menu
-local function showTricksMenu()
+showTricksMenu = function()
     local activePet = ActivePed.read()
     if not activePet then return end
     
@@ -330,7 +438,7 @@ local function showTricksMenu()
 end
 
 -- Switch Control Menu
-local function showSwitchControlMenu()
+showSwitchControlMenu = function()
     local activePet = ActivePed.read()
     if not activePet then return end
     
@@ -355,82 +463,6 @@ local function showSwitchControlMenu()
     })
     
     lib.showContext('pet_switch_menu')
-end
-
--- Customization Menu
-local function showCustomizationMenu(data)
-    local c_name = data.item.metadata.name
-    local c_variation = data.item.metadata.variation
-    
-    local options = {
-        {
-            title = Lang:t('menu.customization_menu.btn_rename'),
-            description = Lang:t('menu.customization_menu.btn_txt_btn_rename') .. c_name,
-            icon = 'keyboard',
-            disabled = data.pet_information.disable.rename,
-            onSelect = function()
-                showRenameMenu(data)
-            end
-        },
-        {
-            title = Lang:t('menu.customization_menu.btn_select_variation'),
-            description = Lang:t('menu.customization_menu.btn_txt_select_variation') .. c_variation,
-            icon = 'brush',
-            onSelect = function()
-                showVariationMenu(data)
-            end
-        },
-        {
-            title = Lang:t('menu.general_menu_items.confirm'),
-            icon = 'circle-check',
-            onSelect = function()
-                TriggerServerEvent('keep-companion:server:compelete_initialization_process', data.item, data.pet_information.type)
-            end
-        }
-    }
-    
-    lib.registerContext({
-        id = 'pet_customization_menu',
-        title = Lang:t('menu.customization_menu.header'),
-        options = options
-    })
-    
-    lib.showContext('pet_customization_menu')
-end
-
-local function showRenameMenu(data)
-    local input = lib.inputDialog('Rename Pet', {
-        {type = 'input', label = 'Pet Name', required = true, max = 12}
-    })
-    
-    if input and input[1] then
-        data.item.metadata.name = input[1]
-        showCustomizationMenu(data)
-    end
-end
-
-local function showVariationMenu(data)
-    local options = {}
-    
-    for key, value in pairs(data.pet_information.pet_variation_list) do
-        table.insert(options, {
-            title = 'Variation: ' .. value,
-            icon = 'brush',
-            onSelect = function()
-                data.item.metadata.variation = value
-                showCustomizationMenu(data)
-            end
-        })
-    end
-    
-    lib.registerContext({
-        id = 'pet_variation_menu',
-        title = Lang:t('menu.variation_menu.header'),
-        menu = 'pet_customization_menu',
-        options = options
-    })
-    
-    lib.showContext('pet_variation_menu')
 end
 
 RegisterNetEvent('keep-companion:client:initialization_process', function(item, pet_information)
@@ -611,13 +643,6 @@ lib.addKeybind({
     defaultKey = Config.Settings.petMenuKeybind,
     onPressed = function()
         if ((IsDowned() and IsPoliceOrEMS()) or not IsDowned()) and not Ishandcuffed() and not IsPauseMenuActive() and not isMenuOpen then
-            local doesPlayerHavePet = ActivePed:read()
-
-            if doesPlayerHavePet == nil then
-                exports.qbx_core:Notify(Lang:t('error.no_pet_under_control'), 'error', 5000)
-                return
-            end
-
             showMainMenu()
         end
     end,

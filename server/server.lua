@@ -591,11 +591,23 @@ end)
 lib.callback.register('keep-companion:server:updatePedData', function(source, clientRes)
     local player = QBCore.Functions.GetPlayer(source)
     if player == nil then
+        print('[Keep-Companion] ERROR: Player is nil for source: ' .. source)
         return false
     end
+    
+    if not clientRes or not clientRes.item or not clientRes.item.metadata then
+        print('[Keep-Companion] ERROR: Invalid client response data')
+        return false
+    end
+    
+    print('[Keep-Companion] Registering pet for player: ' .. source .. ' | Hash: ' .. (clientRes.item.metadata.hash or 'NO_HASH'))
+    
     if Pet:setAsSpawned(source, clientRes) then
+        print('[Keep-Companion] Pet successfully registered')
         return true
     end
+    
+    print('[Keep-Companion] ERROR: Failed to set pet as spawned')
     return false
 end)
 

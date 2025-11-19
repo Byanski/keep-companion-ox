@@ -11,9 +11,12 @@ ActivePed = {
 --- initial pet data
 function ActivePed:new(model, hostile, item, ped, netId)
     local index = (#self.data + 1)
+    
+    print('[Keep-Companion] Creating new ActivePed | Index: ' .. index .. ' | Model: ' .. model .. ' | Hash: ' .. (item.metadata.hash or 'NO_HASH'))
+    
     if self.data[index] == nil then
         self.data[index] = {}
-        self.onControl = 1
+        self.onControl = index
     else
         self.onControl = self.onControl + 1
     end
@@ -38,6 +41,7 @@ function ActivePed:new(model, hostile, item, ped, netId)
                     self.data[index]['canHunt'] = false
                 end
             end
+            print('[Keep-Companion] ActivePed created successfully | onControl: ' .. self.onControl)
             return
         end
     end
@@ -46,6 +50,10 @@ end
 --- return current active pet
 function ActivePed:read()
     local index = ActivePed.onControl
+    if index == -1 or not self.data[index] then
+        print('[Keep-Companion] No active pet | onControl: ' .. index)
+        return nil
+    end
     return ActivePed.data[index]
 end
 
@@ -146,8 +154,15 @@ RegisterNetEvent('keep-companion:client:callCompanion', function(modelName, host
         local netId = NetworkGetNetworkIdFromEntity(ped)
         
         QBCore.Functions.TriggerCallback('keep-companion:server:updatePedData', function(result)
+            if not result then
+                exports.qbx_core:Notify('Failed to register pet', 'error', 5000)
+                DeletePed(ped)
+                return
+            end
+            
             if hostileTowardPlayer == true then
                 exports.qbx_core:Notify(Lang:t('error.not_owner_of_pet'), 'error', 5000)
+                return
             end
             ClearPedTasks(ped)
             TaskFollowTargetedPlayer(ped, plyPed, 3.0, true)
@@ -164,6 +179,12 @@ RegisterNetEvent('keep-companion:client:callCompanion', function(modelName, host
 
             ActivePed:new(modelName, hostileTowardPlayer, item, ped, netId)
             local index, petData = ActivePed:findByHash(item.metadata.hash)
+            
+            if not petData then
+                exports.qbx_core:Notify('Failed to initialize pet data', 'error', 5000)
+                DeletePed(ped)
+                return
+            end
 
             if petData.itemData.metadata.variation ~= nil then
                 PetVariation:setPedVariation(ped, modelName, petData.itemData.metadata.variation)
