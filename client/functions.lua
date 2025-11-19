@@ -11,11 +11,19 @@ end
 
 function TaskFollowTargetedPlayer(follower, targetPlayer, distanceToStopAt, skip)
     ClearPedTasks(follower)
+    
+    -- Enable AI and movement
+    SetPedCanRagdoll(follower, false)
+    SetBlockingOfNonTemporaryEvents(follower, false)  -- Changed to false to allow movement
+    SetPedFleeAttributes(follower, 0, false)
+    SetPedCombatAttributes(follower, 17, true)
+    
     if skip == false then
         TaskGoToCoordAnyMeans(follower, GetEntityCoords(targetPlayer), 10.0, 0, 0, 0, 0)
         Wait(5000)
     end
-    TaskFollowToOffsetOfEntity(follower, targetPlayer, 2.5, 2.5, 2.5, 5.0, 10.0, distanceToStopAt, 1)
+    
+    TaskFollowToOffsetOfEntity(follower, targetPlayer, 2.5, 2.5, 2.5, 5.0, -1, distanceToStopAt, true)
     return true
 end
 
@@ -129,8 +137,14 @@ function CreateAPed(hash, pos)
         Wait(10)
     end
 
-    SetBlockingOfNonTemporaryEvents(ped, true)
-    SetPedFleeAttributes(ped, 0, 0)
+    -- Enable AI properly
+    SetBlockingOfNonTemporaryEvents(ped, false)  -- Allow ped to move
+    SetPedFleeAttributes(ped, 0, false)
+    SetPedCombatAttributes(ped, 46, true)  -- Can fight
+    SetPedCombatAttributes(ped, 0, true)   -- Can use cover
+    SetPedCombatAttributes(ped, 5, true)   -- Can do drivebys
+    SetPedCombatAttributes(ped, 17, true)  -- Always fight
+    
     SetModelAsNoLongerNeeded(ped)
     return ped
 end
@@ -145,7 +159,9 @@ function goThere(ped)
         local coords, entity = RayCastGamePlayCamera(1000.0)
         Draw2DText('Press ~g~E~w~ To go there', 4, { 255, 255, 255 }, 0.4, 0.43, 0.888 + 0.025)
         if IsControlJustReleased(0, 38) then
-            TaskGoToCoordAnyMeans(ped, coords, 10.0, 0, 0, 0, 0)
+            ClearPedTasks(ped)
+            SetBlockingOfNonTemporaryEvents(ped, false)  -- Allow movement
+            TaskGoToCoordAnyMeans(ped, coords, 10.0, 0, 0, 786603, 0xbf800000)
             return
         end
         DrawLine(position.x, position.y, position.z, coords.x, coords.y, coords.z, color.r, color.g, color.b, color.a)
@@ -163,11 +179,11 @@ function getIntoCar()
     local pet_coord = GetEntityCoords(ped)
     local distance = #(player_coord - pet_coord)
     if not IsPedSittingInAnyVehicle(plyped) then
-        QBCore.Functions.Notify(Lang:t('error.need_to_be_inside_car'), "error", 1500)
+        exports.qbx_core:Notify(Lang:t('error.need_to_be_inside_car'), "error", 1500)
         return
     end
     if distance > 8 then
-        QBCore.Functions.Notify(Lang:t('error.to_far'), "error", 1500)
+        exports.qbx_core:Notify(Lang:t('error.to_far'), "error", 1500)
         return
     end
     local vehicle = GetVehiclePedIsUsing(plyped)
@@ -176,7 +192,7 @@ function getIntoCar()
     for i = 1, 5, 1 do
         if IsVehicleSeatFree(vehicle, i - 2) then
             SetPedIntoVehicle(ped, vehicle, i - 2)
-            Animator(ped, ActivePed.read().model, 'siting', {
+            Animator(ped, ActivePed:read().model, 'siting', {
                 c_timings = 'REPEAT'
             })
             seatEmpty = i - 2
@@ -185,7 +201,7 @@ function getIntoCar()
     end
 
     if seatEmpty == 6 then
-        QBCore.Functions.Notify(Lang:t('error.no_empty_seat'), "error", 1500)
+        exports.qbx_core:Notify(Lang:t('error.no_empty_seat'), "error", 1500)
         return
     end
 end
@@ -221,9 +237,6 @@ function attackLogic(alreadyHunting)
                 local petCoord = GetEntityCoords(pet)
                 local distance = GetDistanceBetweenCoords(pedCoord, petCoord)
 
-                -- DrawMarker(2, pedCoord.x, pedCoord.y, pedCoord.z + 2, 0.0, 0.0, 0.0, 0.0, 180.0, 0.0, 1.0, 1.0,
-                    -- 1.0, 255, 128, 0, 50, false, true, 2, nil, nil, false)
-
                 if indicator ~= false and IsPedDeadOrDying(entity) ~= false then
                     alreadyHunting.state = false
                     return true
@@ -233,7 +246,6 @@ function attackLogic(alreadyHunting)
                     return true
                 end
             end
-            -- later ask server to give xp
             alreadyHunting.state = false
             return true
         end
@@ -254,7 +266,7 @@ function HuntandGrab(plyped, activePed)
         if IsControlJustReleased(0, 38) then
             local pet = activePed.entity
             if IsPedAPlayer(entity) == 1 or IsEntityAPed(entity) == false or entity == pet then
-                QBCore.Functions.Notify(Lang:t('error.could_not_do_that'), "error", 1500)
+                exports.qbx_core:Notify(Lang:t('error.could_not_do_that'), "error", 1500)
                 return
             end
 
@@ -317,12 +329,12 @@ end
 function SearchLogic(plyped, activePed)
     if not PlayerJob then return end
     if not (PlayerJob.name == 'police') then
-        QBCore.Functions.Notify('You are not allowed to do this action', "error", 1500)
+        exports.qbx_core:Notify('You are not allowed to do this action', "error", 1500)
         return
     end
 
     if not PlayerJob.onduty == true then
-        QBCore.Functions.Notify('You Must be on duty to do this action', "error", 1500)
+        exports.qbx_core:Notify('You Must be on duty to do this action', "error", 1500)
         return
     end
 
@@ -348,7 +360,7 @@ function SearchLogic(plyped, activePed)
 
 
     local player_server_id = GetPlayerServerId(closestPlayer)
-    QBCore.Functions.TriggerCallback('keep-companion:server:search_inventory', function(result)
+    lib.callback('keep-companion:server:search_inventory', false, function(result)
         Wait(5000)
 
         Animator(activePed.entity, activePed.model, 'misc', {
@@ -364,7 +376,7 @@ function SearchLogic(plyped, activePed)
         })
         Wait(5000)
         if result == true then
-            TriggerEvent('QBCore:Notify', 'K9 found something', 'success', 2500)
+            exports.qbx_core:Notify('K9 found something', 'success', 2500)
             SetAnimalMood(activePed.entity, 1)
             PlayAnimalVocalization(activePed.entity, 3, 'bark')
             Animator(activePed.entity, activePed.model, 'misc', {
@@ -410,16 +422,19 @@ function AttackTargetedPed(AttackerPed, targetPed)
     if not AttackerPed and not targetPed then
         return false
     end
-    SetPedCombatAttributes(AttackerPed, 46, 1)
-    TaskGoToEntityWhileAimingAtEntity(AttackerPed, targetPed, targetPed, 8.0, 1, 0, 15, 1, 1, 1566631136)
+    
+    -- Enable AI
+    SetBlockingOfNonTemporaryEvents(AttackerPed, false)
+    SetPedCombatAttributes(AttackerPed, 46, true)
+    SetPedCombatMovement(AttackerPed, 3)
+    
+    TaskGoToEntityWhileAimingAtEntity(AttackerPed, targetPed, targetPed, 8.0, true, 0.5, 10.0, true, true, 1566631136)
     TaskCombatPed(AttackerPed, targetPed, 0, 16)
     SetRelationshipBetweenPed(AttackerPed)
-    SetPedCombatMovement(AttackerPed, 3)
-
 
     while IsPedDeadOrDying(targetPed, 0) ~= 1 do
         Wait(1000)
-        -- skip
     end
+    
     TaskFollowTargetedPlayer(AttackerPed, PlayerPedId(), 3.0, false)
 end

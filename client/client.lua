@@ -270,6 +270,13 @@ RegisterNetEvent('keep-companion:client:callCompanion', function(modelName, host
             end
             
             ClearPedTasks(ped)
+
+            SetBlockingOfNonTemporaryEvents(ped, false)  -- Allow pet to move
+            SetPedCanRagdoll(ped, false)
+            SetPedFleeAttributes(ped, 0, false)
+            SetPedCombatAttributes(ped, 46, true)
+
+            TaskFollowToOffsetOfEntity(ped, plyPed, 2.5, 2.5, 2.5, 5.0, -1, 3.0, true)
             TaskFollowTargetedPlayer(ped, plyPed, 3.0, true)
 
             if Config.Settings.PetMiniMap.showblip then
