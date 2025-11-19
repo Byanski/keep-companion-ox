@@ -38,6 +38,7 @@ local showCustomizationMenu
 local showRenameMenu
 local showVariationMenu
 
+
 -- action menu
 local menu = {
     [1] = {
@@ -117,9 +118,6 @@ local menu = {
     [6] = {
         lable = Lang:t('menu.action_menu.get_in_car'),
         TYPE = 'GetinCar',
-        show = function(activePet)
-            return not activePet.inVehicle
-        end,
         action = function(plyped, activePed)
             getIntoCar()
         end
@@ -127,9 +125,6 @@ local menu = {
     [7] = {
         lable = 'Get Out of Car',
         TYPE = 'GetOutOfCar',
-        show = function(activePet)
-            return activePet.inVehicle == true
-        end,
         action = function(plyped, activePed)
             getOutOfCar()
         end
@@ -137,11 +132,6 @@ local menu = {
     [8] = {
         lable = 'Search Person',
         TYPE = 'SearchPerson',
-        show = function(activePet)
-            if not PlayerJob then return false end
-            if not (PlayerJob.name == 'police') then return false end
-            return isModelK9(activePed.model)
-        end,
         action = function(plyped, activePed)
             SearchLogic(plyped, activePed)
         end
@@ -149,12 +139,19 @@ local menu = {
     [9] = {
         lable = 'Search Car',
         TYPE = 'SearchCar',
-        show = function(activePed)
-            if not PlayerJob then return false end
-            if not (PlayerJob.name == 'police') then return false end
-            return isModelK9(activePed.model)
-        end,
         action = function(plyped, activePed)
+            if not PlayerJob then 
+                exports.qbx_core:Notify('You are not police', "error", 1500)
+                return 
+            end
+            if not (PlayerJob.name == 'police') then
+                exports.qbx_core:Notify('You are not police', "error", 1500)
+                return
+            end
+            if not isModelK9(activePed.model) then
+                exports.qbx_core:Notify('This pet cannot search vehicles', "error", 1500)
+                return
+            end
             local vehicle = QBCore.Functions.GetClosestVehicle()
             k9SearchVehicle(vehicle, activePed)
         end
@@ -377,17 +374,30 @@ showMainMenu = function()
     lib.showContext('pet_main_menu')
 end
 
+
 -- Action Menu
 showActionMenu = function()
-    local activePet = ActivePed.read()
+    local activePet = ActivePed:read()
     if not activePet then return end
     
     local name = activePet.itemData.metadata.name
     local options = {}
     
     for key, value in ipairs(menu) do
-        if value.show then
-            if not value.show(activePet) then
+        -- Skip vehicle options based on state
+        if value.TYPE == 'GetinCar' and activePet.inVehicle then
+            goto continue
+        end
+        if value.TYPE == 'GetOutOfCar' and not activePet.inVehicle then
+            goto continue
+        end
+        
+        -- Skip police options if not police
+        if (value.TYPE == 'SearchPerson' or value.TYPE == 'SearchCar') then
+            if not PlayerJob or PlayerJob.name ~= 'police' then
+                goto continue
+            end
+            if not isModelK9(activePet.model) then
                 goto continue
             end
         end
