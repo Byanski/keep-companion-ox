@@ -59,6 +59,7 @@ local Translations = {
             switchcontrol_sub_header = 'click on pet which you want to control',
         },
 
+        
         action_menu = {
             header = 'Name: %s',
             sub_header = 'current pet under your control',
@@ -68,6 +69,7 @@ local Translations = {
             go_there = 'Go There',
             wait = 'Wait here',
             get_in_car = 'Get in car',
+            get_out_car = 'Get out of car',
             beg = 'Do some tricks',
             paw = 'Paw',
             play_dead = 'Play dead',
@@ -79,9 +81,9 @@ local Translations = {
                 pet_unable_to_do_that = 'unable to do your command',
 
                 -- get into car
-                need_to_be_inside_car = 'You need to be inside a car',
-                to_far = 'To far',
-                no_empty_seat = 'no empty seat found!'
+                need_to_be_inside_car = 'You need to be inside a vehicle',
+                to_far = 'Pet is too far away',
+                no_empty_seat = 'No empty seats available!'
             },
             success = {
 

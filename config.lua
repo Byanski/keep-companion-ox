@@ -183,18 +183,40 @@ Config.core_items = {
     }
 }
 
--- K9 Settings
-Config.inventory_name = 'ox_inventory' -- Changed from 'qb-inventory' to 'ox_inventory'
 
+-- K9 Settings
+Config.inventory_name = 'ox_inventory'
+
+-- Add items here that K9 dogs can detect
 local illegal_items = {
     'weed_brick',
     'coke_small_brick',
-    'coke_brick'
+    'coke_brick',
+    'meth',
+    'weed',
+    'coke',
+    'crack',
+    'xtc',
+    'heroin',
+    'lsd',
+    'oxy',
+    'joint',
+    'marijuana',
+    'cocaine',
+    'opium'
 }
 
 Config.k9 = {
     illegal_items = illegal_items,
     models = {
         'a_c_k9',
-    }
+    },
+    -- Models that can detect drugs (Husky and Rottweiler only)
+    detection_models = {
+        'A_C_Husky',
+        'A_C_Rottweiler',
+        'a_c_k9'
+    },
+    search_distance = 5.0,  -- Distance to search around player
+    alert_duration = 5000,  -- How long alert stays on screen
 }

@@ -152,108 +152,222 @@ end
 --- creates laser and force ped to move toward coord
 ---@param ped 'ped'
 function goThere(ped)
-    while true do
-        local color = { r = 2, g = 241, b = 181, a = 200 }
-        local plyped = PlayerPedId()
-        local position = GetEntityCoords(plyped)
-        local coords, entity = RayCastGamePlayCamera(1000.0)
-        Draw2DText('Press ~g~E~w~ To go there', 4, { 255, 255, 255 }, 0.4, 0.43, 0.888 + 0.025)
-        if IsControlJustReleased(0, 38) then
-            ClearPedTasks(ped)
-            SetBlockingOfNonTemporaryEvents(ped, false)  -- Allow movement
-            TaskGoToCoordAnyMeans(ped, coords, 10.0, 0, 0, 786603, 0xbf800000)
-            return
+    CreateThread(function()
+        local active = true
+        while active do
+            local color = { r = 2, g = 241, b = 181, a = 200 }
+            local plyped = PlayerPedId()
+            local position = GetEntityCoords(plyped)
+            local coords, entity = RayCastGamePlayCamera(1000.0)
+            
+            Draw2DText('Press ~g~E~w~ to send pet here | ~r~X~w~ to cancel', 4, { 255, 255, 255 }, 0.4, 0.43, 0.888 + 0.025)
+            
+            if IsControlJustReleased(0, 38) then -- E key
+                ClearPedTasks(ped)
+                SetBlockingOfNonTemporaryEvents(ped, false)
+                SetPedKeepTask(ped, true)
+                
+                -- Ground check
+                local groundZ = coords.z
+                local foundGround, zPos = GetGroundZFor_3dCoord(coords.x, coords.y, coords.z + 100.0, false)
+                if foundGround then
+                    groundZ = zPos
+                end
+                
+                TaskGoToCoordAnyMeans(ped, coords.x, coords.y, groundZ, 5.0, 0, false, 1, 0xbf800000)
+                exports.qbx_core:Notify('Pet is going to location', 'success', 2000)
+                active = false
+            end
+            
+            if IsControlJustReleased(0, 73) then -- X key
+                exports.qbx_core:Notify('Command cancelled', 'error', 2000)
+                active = false
+            end
+            
+            DrawLine(position.x, position.y, position.z, coords.x, coords.y, coords.z, color.r, color.g, color.b, color.a)
+            DrawMarker(28, coords.x, coords.y, coords.z, 0.0, 0.0, 0.0, 0.0, 180.0, 0.0, 0.5, 0.5, 0.5, color.r, color.g,
+                color.b, color.a, false, true, 2, nil, nil, false)
+            Wait(0)
         end
-        DrawLine(position.x, position.y, position.z, coords.x, coords.y, coords.z, color.r, color.g, color.b, color.a)
-        DrawMarker(28, coords.x, coords.y, coords.z, 0.0, 0.0, 0.0, 0.0, 180.0, 0.0, 0.1, 0.1, 0.1, color.r, color.g,
-            color.b, color.a, false, true, 2, nil, nil, false)
-        Wait(0)
-    end
+    end)
 end
 
 --- logic to warp peds inside vehicles
 function getIntoCar()
     local plyped = PlayerPedId()
-    local ped = ActivePed:read().entity
+    local activePet = ActivePed:read()
+    if not activePet then
+        exports.qbx_core:Notify(Lang:t('error.no_pet_under_control'), "error", 1500)
+        return
+    end
+    
+    local ped = activePet.entity
     local player_coord = GetEntityCoords(plyped)
     local pet_coord = GetEntityCoords(ped)
     local distance = #(player_coord - pet_coord)
+    
     if not IsPedSittingInAnyVehicle(plyped) then
-        exports.qbx_core:Notify(Lang:t('error.need_to_be_inside_car'), "error", 1500)
+        exports.qbx_core:Notify('You need to be inside a vehicle', "error", 1500)
         return
     end
-    if distance > 8 then
-        exports.qbx_core:Notify(Lang:t('error.to_far'), "error", 1500)
+    
+    if distance > 10 then
+        exports.qbx_core:Notify('Pet is too far away', "error", 1500)
         return
     end
+    
     local vehicle = GetVehiclePedIsUsing(plyped)
-    local seatEmpty = 6
+    local seatEmpty = -1
 
-    for i = 1, 5, 1 do
-        if IsVehicleSeatFree(vehicle, i - 2) then
-            SetPedIntoVehicle(ped, vehicle, i - 2)
-            Animator(ped, ActivePed:read().model, 'siting', {
-                c_timings = 'REPEAT'
-            })
-            seatEmpty = i - 2
+    -- Check for empty seats (skip driver seat)
+    for i = 0, GetVehicleMaxNumberOfPassengers(vehicle) - 1 do
+        if IsVehicleSeatFree(vehicle, i) then
+            seatEmpty = i
             break
         end
     end
 
-    if seatEmpty == 6 then
-        exports.qbx_core:Notify(Lang:t('error.no_empty_seat'), "error", 1500)
+    if seatEmpty == -1 then
+        exports.qbx_core:Notify('No empty seats available', "error", 1500)
         return
     end
+    
+    -- Put pet in vehicle
+    ClearPedTasks(ped)
+    TaskEnterVehicle(ped, vehicle, -1, seatEmpty, 2.0, 1, 0)
+    
+    -- Wait for pet to enter, then adjust position
+    CreateThread(function()
+        local timeout = 0
+        while not IsPedInVehicle(ped, vehicle, false) and timeout < 50 do
+            Wait(100)
+            timeout = timeout + 1
+        end
+        
+        if IsPedInVehicle(ped, vehicle, false) then
+            -- Fix clipping by adjusting Z offset
+            local offset = GetOffsetFromEntityGivenWorldCoords(vehicle, pet_coord.x, pet_coord.y, pet_coord.z)
+            SetPedIntoVehicle(ped, vehicle, seatEmpty)
+            
+            -- Store that this pet is in a vehicle
+            activePet.inVehicle = true
+            activePet.vehicle = vehicle
+            
+            exports.qbx_core:Notify('Pet is now in the vehicle', 'success', 2000)
+        else
+            exports.qbx_core:Notify('Pet failed to enter vehicle', 'error', 2000)
+        end
+    end)
+end
+
+--- Remove pet from vehicle
+function getOutOfCar()
+    local plyped = PlayerPedId()
+    local activePet = ActivePed:read()
+    if not activePet then
+        exports.qbx_core:Notify('No active pet', "error", 1500)
+        return
+    end
+    
+    local ped = activePet.entity
+    
+    if not IsPedInAnyVehicle(ped, false) then
+        exports.qbx_core:Notify('Pet is not in a vehicle', "error", 1500)
+        return
+    end
+    
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    
+    TaskLeaveVehicle(ped, vehicle, 0)
+    
+    CreateThread(function()
+        Wait(2000)
+        activePet.inVehicle = false
+        activePet.vehicle = nil
+        ClearPedTasks(ped)
+        TaskFollowToOffsetOfEntity(ped, plyped, 2.5, 2.5, 2.5, 5.0, -1, 3.0, true)
+        exports.qbx_core:Notify('Pet exited the vehicle', 'success', 2000)
+    end)
 end
 
 function attackLogic(alreadyHunting)
-    while true do
-        Wait(0)
-        local color = {
-            r = 2,
-            g = 241,
-            b = 181,
-            a = 200
-        }
-        local plyped = PlayerPedId()
-        local position = GetEntityCoords(plyped)
-        local coords, entity = RayCastGamePlayCamera(1000.0)
-        Draw2DText('PRESS ~g~E~w~ TO ATTACK TARGET', 4, { 255, 255, 255 }, 0.4, 0.43, 0.888 + 0.025)
-        if IsControlJustReleased(0, 38) then
-            ClearPedTasks(ActivePed:read().entity)
-            if IsEntityAPed(entity) ~= 1 then
-                return false
-            end
-
-            local pet = ActivePed:read().entity
-            local chaseDistance = Config.Settings.chaseDistance
-            local indicator = Config.Settings.chaseIndicator
-            AttackTargetedPed(pet, entity)
-            alreadyHunting.state = true
-            while IsPedDeadOrDying(entity) == false do
-                -- draw every frame
-                Wait(5)
-                local pedCoord = GetEntityCoords(entity)
-                local petCoord = GetEntityCoords(pet)
-                local distance = GetDistanceBetweenCoords(pedCoord, petCoord)
-
-                if indicator ~= false and IsPedDeadOrDying(entity) ~= false then
-                    alreadyHunting.state = false
-                    return true
+    CreateThread(function()
+        local active = true
+        while active do
+            local color = { r = 255, g = 0, b = 0, a = 200 }
+            local plyped = PlayerPedId()
+            local position = GetEntityCoords(plyped)
+            local coords, entity = RayCastGamePlayCamera(1000.0)
+            
+            Draw2DText('PRESS ~g~E~w~ TO ATTACK TARGET | ~r~X~w~ TO CANCEL', 4, { 255, 255, 255 }, 0.4, 0.43, 0.888 + 0.025)
+            
+            if IsControlJustReleased(0, 38) then -- E key
+                ClearPedTasks(ActivePed:read().entity)
+                
+                -- Check if target is valid
+                if not DoesEntityExist(entity) then
+                    exports.qbx_core:Notify('No valid target', 'error', 2000)
+                    active = false
+                    return
                 end
-                if distance >= chaseDistance then
-                    alreadyHunting.state = false
-                    return true
+                
+                if not IsEntityAPed(entity) then
+                    exports.qbx_core:Notify('Target must be a ped', 'error', 2000)
+                    active = false
+                    return
                 end
+
+                local pet = ActivePed:read().entity
+                local chaseDistance = Config.Settings.chaseDistance
+                
+                exports.qbx_core:Notify('Pet is attacking target!', 'success', 2000)
+                alreadyHunting.state = true
+                active = false
+                
+                -- Attack the target
+                AttackTargetedPed(pet, entity)
+                
+                -- Monitor the attack
+                CreateThread(function()
+                    while not IsPedDeadOrDying(entity, false) do
+                        Wait(500)
+                        local pedCoord = GetEntityCoords(entity)
+                        local petCoord = GetEntityCoords(pet)
+                        local distance = GetDistanceBetweenCoords(pedCoord, petCoord, true)
+
+                        if distance >= chaseDistance then
+                            exports.qbx_core:Notify('Target escaped', 'error', 2000)
+                            alreadyHunting.state = false
+                            ClearPedTasks(pet)
+                            TaskFollowToOffsetOfEntity(pet, plyped, 2.5, 2.5, 2.5, 5.0, -1, 3.0, true)
+                            return
+                        end
+                    end
+                    
+                    exports.qbx_core:Notify('Target eliminated', 'success', 2000)
+                    alreadyHunting.state = false
+                    Wait(1000)
+                    ClearPedTasks(pet)
+                    TaskFollowToOffsetOfEntity(pet, plyped, 2.5, 2.5, 2.5, 5.0, -1, 3.0, true)
+                end)
             end
-            alreadyHunting.state = false
-            return true
+            
+            if IsControlJustReleased(0, 73) then -- X key
+                exports.qbx_core:Notify('Attack cancelled', 'error', 2000)
+                active = false
+            end
+            
+            -- Draw targeting line
+            if DoesEntityExist(entity) and IsEntityAPed(entity) then
+                local entCoords = GetEntityCoords(entity)
+                DrawLine(position.x, position.y, position.z, entCoords.x, entCoords.y, entCoords.z, color.r, color.g, color.b, color.a)
+                DrawMarker(28, entCoords.x, entCoords.y, entCoords.z + 1.0, 0.0, 0.0, 0.0, 0.0, 180.0, 0.0, 0.3, 0.3, 0.3, color.r, color.g,
+                    color.b, color.a, false, true, 2, nil, nil, false)
+            end
+            
+            Wait(0)
         end
-        -- target
-        DrawLine(position.x, position.y, position.z, coords.x, coords.y, coords.z, color.r, color.g, color.b, color.a)
-        DrawMarker(28, coords.x, coords.y, coords.z, 0.0, 0.0, 0.0, 0.0, 180.0, 0.0, 0.1, 0.1, 0.1, color.r, color.g,
-            color.b, color.a, false, true, 2, nil, nil, false)
-    end
+    end)
 end
 
 function HuntandGrab(plyped, activePed)
@@ -326,6 +440,17 @@ function get_player_cid()
     return false
 end
 
+--- Check if model can detect drugs
+local function canDetectDrugs(model)
+    for key, drugDogModel in pairs(Config.k9.detection_models) do
+        if model == drugDogModel then
+            return true
+        end
+    end
+    return false
+end
+
+--- Search nearby players for illegal items (police only)
 function SearchLogic(plyped, activePed)
     if not PlayerJob then return end
     if not (PlayerJob.name == 'police') then
@@ -333,24 +458,39 @@ function SearchLogic(plyped, activePed)
         return
     end
 
-    if not PlayerJob.onduty == true then
-        exports.qbx_core:Notify('You Must be on duty to do this action', "error", 1500)
+    if not PlayerJob.onduty then
+        exports.qbx_core:Notify('You must be on duty to do this action', "error", 1500)
+        return
+    end
+    
+    if not canDetectDrugs(activePed.model) then
+        exports.qbx_core:Notify('This pet cannot detect drugs', "error", 1500)
         return
     end
 
-    ClearPedTasks(ActivePed:read().entity)
     local pedCoord = GetEntityCoords(PlayerPedId())
     local closestPlayer = QBCore.Functions.GetClosestPlayer(pedCoord)
+    
     if closestPlayer == -1 then
+        exports.qbx_core:Notify('No players nearby', "error", 1500)
         return
     end
+    
     local pedplayer = GetPlayerPed(closestPlayer)
-    TaskGoToCoordAnyMeans(activePed.entity, GetEntityCoords(pedplayer), 10.0, 0, 0, 0, 0)
+    local targetCoords = GetEntityCoords(pedplayer)
+    local distance = #(pedCoord - targetCoords)
+    
+    if distance > Config.k9.search_distance then
+        exports.qbx_core:Notify('Target is too far away', "error", 1500)
+        return
+    end
+
+    ClearPedTasks(activePed.entity)
+    TaskGoToCoordAnyMeans(activePed.entity, targetCoords, 5.0, 0, 0, 0, 0)
 
     local finished = false
     CreateThread(function()
-        while finished == false do
-            -- draw every frame
+        while not finished do
             Wait(5)
             pedCoord = GetEntityCoords(GetPlayerPed(closestPlayer))
             DrawMarker(2, pedCoord.x, pedCoord.y, pedCoord.z + 2, 0.0, 0.0, 0.0, 0.0, 180.0, 0.0, 1.0, 1.0,
@@ -358,40 +498,68 @@ function SearchLogic(plyped, activePed)
         end
     end)
 
-
     local player_server_id = GetPlayerServerId(closestPlayer)
+    
+    Wait(3000)  -- Wait for dog to reach target
+    
+    Animator(activePed.entity, activePed.model, 'misc', {
+        animation = 'indicate_low',
+        sequentialTimings = {
+            [1] = 6,
+            [2] = 0,
+            [3] = 2,
+            step = 1,
+            Timeout = 6
+        }
+    })
+    
     lib.callback('keep-companion:server:search_inventory', false, function(result)
         Wait(5000)
 
-        Animator(activePed.entity, activePed.model, 'misc', {
-            animation = 'indicate_low',
-            sequentialTimings = {
-                -- How close the value is to the Timeout value determines how fast the script moves to the next animation.
-                [1] = 6, -- start animation Timeout ==> 1sec(6s-5s) to loop
-                [2] = 0, -- loop animation Timeout  ==> 6sec(6s-0s) to exit
-                [3] = 2, -- exit animation Timeout  ==> 4sec(6s-2s) to end
-                step = 1,
-                Timeout = 6
-            }
-        })
-        Wait(5000)
         if result == true then
-            exports.qbx_core:Notify('K9 found something', 'success', 2500)
+            -- Dog found drugs!
+            exports.qbx_core:Notify('K9 ALERT: Illegal substances detected!', 'error', Config.k9.alert_duration)
             SetAnimalMood(activePed.entity, 1)
             PlayAnimalVocalization(activePed.entity, 3, 'bark')
+            
             Animator(activePed.entity, activePed.model, 'misc', {
                 animation = 'indicate_high',
                 sequentialTimings = {
-                    -- How close the value is to the Timeout value determines how fast the script moves to the next animation.
-                    [1] = 6, -- start animation Timeout ==> 1sec(6s-5s) to loop
-                    [2] = 0, -- loop animation Timeout  ==> 6sec(6s-0s) to exit
-                    [3] = 2, -- exit animation Timeout  ==> 4sec(6s-2s) to end
+                    [1] = 6,
+                    [2] = 0,
+                    [3] = 2,
                     step = 1,
                     Timeout = 6
                 }
             })
+            
+            -- Alert screen notification
+            CreateThread(function()
+                local endTime = GetGameTimer() + Config.k9.alert_duration
+                while GetGameTimer() < endTime do
+                    SetTextFont(4)
+                    SetTextScale(0.0, 0.7)
+                    SetTextColour(255, 0, 0, 255)
+                    SetTextDropshadow(0, 0, 0, 0, 255)
+                    SetTextEdge(1, 0, 0, 0, 255)
+                    SetTextDropShadow()
+                    SetTextOutline()
+                    SetTextCentre(true)
+                    BeginTextCommandDisplayText("STRING")
+                    AddTextComponentSubstringPlayerName("~r~K9 ALERT: ILLEGAL ITEMS DETECTED")
+                    EndTextCommandDisplayText(0.5, 0.85)
+                    Wait(0)
+                end
+            end)
+        else
+            exports.qbx_core:Notify('K9 found nothing suspicious', 'success', 2500)
         end
         finished = true
+        
+        -- Return dog to owner
+        Wait(2000)
+        ClearPedTasks(activePed.entity)
+        TaskFollowToOffsetOfEntity(activePed.entity, plyped, 2.5, 2.5, 2.5, 5.0, -1, 3.0, true)
     end, player_server_id)
 end
 
@@ -419,22 +587,30 @@ end
 ---@param targetPed 'ped'
 ---@return 'void'
 function AttackTargetedPed(AttackerPed, targetPed)
-    if not AttackerPed and not targetPed then
+    if not AttackerPed or not targetPed then
         return false
     end
     
-    -- Enable AI
-    SetBlockingOfNonTemporaryEvents(AttackerPed, false)
-    SetPedCombatAttributes(AttackerPed, 46, true)
-    SetPedCombatMovement(AttackerPed, 3)
-    
-    TaskGoToEntityWhileAimingAtEntity(AttackerPed, targetPed, targetPed, 8.0, true, 0.5, 10.0, true, true, 1566631136)
-    TaskCombatPed(AttackerPed, targetPed, 0, 16)
-    SetRelationshipBetweenPed(AttackerPed)
-
-    while IsPedDeadOrDying(targetPed, 0) ~= 1 do
-        Wait(1000)
+    if not DoesEntityExist(AttackerPed) or not DoesEntityExist(targetPed) then
+        return false
     end
     
-    TaskFollowTargetedPlayer(AttackerPed, PlayerPedId(), 3.0, false)
+    -- Enable AI and combat
+    SetBlockingOfNonTemporaryEvents(AttackerPed, false)
+    SetPedFleeAttributes(AttackerPed, 0, false)
+    SetPedCombatAttributes(AttackerPed, 46, true)  -- Can use cover
+    SetPedCombatAttributes(AttackerPed, 5, true)   -- Can fight armed
+    SetPedCombatAttributes(AttackerPed, 17, true)  -- Always fight
+    SetPedCombatMovement(AttackerPed, 3)  -- Aggressive movement
+    SetPedKeepTask(AttackerPed, true)
+    
+    -- Set relationship to attack
+    SetRelationshipBetweenPed(AttackerPed)
+    
+    -- Clear any existing tasks
+    ClearPedTasks(AttackerPed)
+    
+    -- Give attack tasks
+    TaskCombatPed(AttackerPed, targetPed, 0, 16)
+    TaskGoToEntity(AttackerPed, targetPed, -1, 1.0, 3.0, 1073741824, 0)
 end

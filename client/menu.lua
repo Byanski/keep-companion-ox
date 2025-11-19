@@ -117,18 +117,36 @@ local menu = {
     [6] = {
         lable = Lang:t('menu.action_menu.get_in_car'),
         TYPE = 'GetinCar',
+        show = function(activePet)
+            return not activePet.inVehicle
+        end,
         action = function(plyped, activePed)
             getIntoCar()
         end
     },
     [7] = {
+        lable = 'Get Out of Car',
+        TYPE = 'GetOutOfCar',
+        show = function(activePet)
+            return activePet.inVehicle == true
+        end,
+        action = function(plyped, activePed)
+            getOutOfCar()
+        end
+    },
+    [8] = {
         lable = 'Search Person',
         TYPE = 'SearchPerson',
+        show = function(activePet)
+            if not PlayerJob then return false end
+            if not (PlayerJob.name == 'police') then return false end
+            return isModelK9(activePed.model)
+        end,
         action = function(plyped, activePed)
             SearchLogic(plyped, activePed)
         end
     },
-    [8] = {
+    [9] = {
         lable = 'Search Car',
         TYPE = 'SearchCar',
         show = function(activePed)
