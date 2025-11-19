@@ -18,7 +18,7 @@ function ActivePed:new(model, hostile, item, ped, netId)
     -- Find next available index
     local index = 1
     for i = 1, 999 do
-        if not self.data[i] then
+        if not ActivePed.data[i] then
             index = i
             break
         end
@@ -27,7 +27,7 @@ function ActivePed:new(model, hostile, item, ped, netId)
     print('[Keep-Companion] Using index: ' .. index)
     
     -- Initialize the data table for this pet
-    self.data[index] = {
+    ActivePed.data[index] = {
         model = model,
         entity = ped,
         netId = netId,
@@ -42,14 +42,14 @@ function ActivePed:new(model, hostile, item, ped, netId)
     local found = false
     for key, information in pairs(Config.pets) do
         if information.name == item.name then
-            self.data[index].modelString = information.model
-            self.data[index].maxHealth = information.maxHealth
+            ActivePed.data[index].modelString = information.model
+            ActivePed.data[index].maxHealth = information.maxHealth
             
             for w in information.distinct:gmatch("%S+") do
                 if w == 'yes' then
-                    self.data[index].canHunt = true
+                    ActivePed.data[index].canHunt = true
                 elseif w == 'no' then
-                    self.data[index].canHunt = false
+                    ActivePed.data[index].canHunt = false
                 end
             end
             found = true
@@ -63,11 +63,11 @@ function ActivePed:new(model, hostile, item, ped, netId)
     end
     
     -- Set this as the active pet
-    self.onControl = index
+    ActivePed.onControl = index
     
     print('[Keep-Companion] Pet data stored at index: ' .. index)
-    print('[Keep-Companion] onControl set to: ' .. self.onControl)
-    print('[Keep-Companion] Total pets now: ' .. self:getTotalPets())
+    print('[Keep-Companion] onControl set to: ' .. ActivePed.onControl)
+    print('[Keep-Companion] Total pets now: ' .. ActivePed:getTotalPets())
     print('[Keep-Companion] ===== ActivePed:new END =====')
     
     return true
@@ -75,45 +75,45 @@ end
 
 --- return current active pet
 function ActivePed:read()
-    if self.onControl == -1 then
+    if ActivePed.onControl == -1 then
         print('[Keep-Companion] ActivePed:read - No active pet (onControl = -1)')
         return nil
     end
     
-    if not self.data[self.onControl] then
-        print('[Keep-Companion] ActivePed:read - No data at index: ' .. self.onControl)
+    if not ActivePed.data[ActivePed.onControl] then
+        print('[Keep-Companion] ActivePed:read - No data at index: ' .. ActivePed.onControl)
         return nil
     end
     
-    return self.data[self.onControl]
+    return ActivePed.data[ActivePed.onControl]
 end
 
 --- clean current ped data
 function ActivePed:remove(index)
-    if not self.data[index] then return end
+    if not ActivePed.data[index] then return end
     
-    local netId = NetworkGetNetworkIdFromEntity(self.data[index].entity)
+    local netId = NetworkGetNetworkIdFromEntity(ActivePed.data[index].entity)
     if netId then
         TriggerServerEvent('keep-companion:server:ForceRemoveNetEntity', netId)
     end
     
-    self.data[index] = nil
+    ActivePed.data[index] = nil
     
     -- Find new onControl or set to -1
     local foundNew = false
-    for key, value in pairs(self.data) do
-        self.onControl = key
+    for key, value in pairs(ActivePed.data) do
+        ActivePed.onControl = key
         foundNew = true
         break
     end
     
     if not foundNew then
-        self.onControl = -1
+        ActivePed.onControl = -1
     end
 end
 
 function ActivePed:removeAll()
-    for key, value in pairs(self.data) do
+    for key, value in pairs(ActivePed.data) do
         if DoesEntityExist(value.entity) then
             DeletePed(value.entity)
         end
@@ -123,21 +123,21 @@ function ActivePed:removeAll()
         }, { key = 'XP' })
     end
     
-    TriggerServerEvent('keep-companion:server:onPlayerUnload', self.data)
-    self.data = {}
-    self.onControl = -1
+    TriggerServerEvent('keep-companion:server:onPlayerUnload', ActivePed.data)
+    ActivePed.data = {}
+    ActivePed.onControl = -1
 end
 
 function ActivePed:switchControl(to)
-    if not self.data[to] then
+    if not ActivePed.data[to] then
         return false
     end
-    self.onControl = to
+    ActivePed.onControl = to
     return true
 end
 
 function ActivePed:findByHash(hash)
-    for key, data in pairs(self.data) do
+    for key, data in pairs(ActivePed.data) do
         if data.itemData and data.itemData.metadata and data.itemData.metadata.hash == hash then
             return key, data
         end
@@ -147,7 +147,7 @@ end
 
 function ActivePed:petsList()
     local tmp = {}
-    for key, data in pairs(self.data) do
+    for key, data in pairs(ActivePed.data) do
         table.insert(tmp, {
             key = key,
             name = data.itemData.metadata.name,
@@ -164,7 +164,7 @@ end
 
 function ActivePed:getTotalPets()
     local count = 0
-    for _ in pairs(self.data) do
+    for _ in pairs(ActivePed.data) do
         count = count + 1
     end
     return count
