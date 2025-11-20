@@ -1,4 +1,4 @@
-# 🐾 [Your Resource Name] (Keep Companion - Reworked)
+# 🐾 [Qbyanski-Pets] (Keep Companion - Reworked)
 
 A robust and fully functional companion/pet script for FiveM, originally by SWKeep, completely **re-engineered for full stability** and **Ox-Core compatibility**. This version addresses and resolves all known issues from the original codebase.
 
@@ -65,9 +65,10 @@ The following items are required for the pets and pet management. Add the entire
     ['petnametag'] = { label = 'Pet Name Tag', weight = 500, stack = true, close = true, description = "Rename your pet." },
     ['petwaterbottleportable'] = { label = 'Pet Water Bottle', weight = 500, stack = false, close = true, description = "Water for your pet. Stop trying to drink this." },
     ['petgroomingkit'] = { label = 'Pet Grooming Kit', weight = 500, stack = false, close = true, description = "Now your pet can pass a wave check." },
+```
 
-    ### Step 3: shop Setup (Ox Inventory)
-    add the following shop definitions to your `ox_inventory/data/shops.lua`
+### Step 3: shop Setup (Ox Inventory)
+add the following shop definitions to your `ox_inventory/data/shops.lua`
 
     ```lua
     PetShop = {
@@ -99,7 +100,7 @@ The following items are required for the pets and pet management. Add the entire
             -- Add other locations (like Sandy Shores MLO) here
         }
     },
-
+```
 ### Step 4 : Setting up illegal poacher
 
 ```lua
