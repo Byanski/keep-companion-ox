@@ -10,11 +10,31 @@ function makeEntityFaceEntity(entity1, entity2)
 end
 
 function TaskFollowTargetedPlayer(follower, targetPlayer, distanceToStopAt, skip)
+    if not DoesEntityExist(follower) then return false end
+    
     ClearPedTasks(follower)
+    
+    -- Check if pet is in a weird location (under map, etc)
+    local petCoords = GetEntityCoords(follower)
+    local playerCoords = GetEntityCoords(targetPlayer)
+    
+    -- If pet is too far below ground level, teleport to player
+    if petCoords.z < -50.0 or petCoords.z > 1000.0 then
+        local safeCoords = GetOffsetFromEntityInWorldCoords(targetPlayer, 2.0, 2.0, 0.0)
+        local groundZ = safeCoords.z
+        local foundGround, zPos = GetGroundZFor_3dCoord(safeCoords.x, safeCoords.y, safeCoords.z + 100.0, false)
+        
+        if foundGround then
+            groundZ = zPos
+        end
+        
+        SetEntityCoords(follower, safeCoords.x, safeCoords.y, groundZ, false, false, false, true)
+        exports.qbx_core:Notify('Pet was stuck - teleported to you', 'info', 2000)
+    end
     
     -- Enable AI and movement
     SetPedCanRagdoll(follower, false)
-    SetBlockingOfNonTemporaryEvents(follower, false)  -- Changed to false to allow movement
+    SetBlockingOfNonTemporaryEvents(follower, false)
     SetPedFleeAttributes(follower, 0, false)
     SetPedCombatAttributes(follower, 17, true)
     
@@ -282,16 +302,57 @@ function getOutOfCar()
     end
     
     local vehicle = GetVehiclePedIsIn(ped, false)
+    local vehicleCoords = GetEntityCoords(vehicle)
     
+    -- Get a safe exit position next to the vehicle
+    local safeCoord = GetOffsetFromEntityInWorldCoords(vehicle, 2.0, 0.0, 0.0)
+    local groundZ = safeCoord.z
+    local foundGround, zPos = GetGroundZFor_3dCoord(safeCoord.x, safeCoord.y, safeCoord.z + 100.0, false)
+    
+    if foundGround then
+        groundZ = zPos
+    end
+    
+    -- Task pet to leave vehicle
     TaskLeaveVehicle(ped, vehicle, 0)
     
+    -- Monitor exit and fix position
     CreateThread(function()
-        Wait(2000)
-        activePet.inVehicle = false
-        activePet.vehicle = nil
-        ClearPedTasks(ped)
-        TaskFollowToOffsetOfEntity(ped, plyped, 2.5, 2.5, 2.5, 5.0, -1, 3.0, true)
-        exports.qbx_core:Notify('Pet exited the vehicle', 'success', 2000)
+        local timeout = 0
+        -- Wait for pet to start exiting
+        while IsPedInVehicle(ped, vehicle, false) and timeout < 50 do
+            Wait(100)
+            timeout = timeout + 1
+        end
+        
+        Wait(500) -- Wait a bit for exit animation
+        
+        -- Force pet to safe ground position
+        if DoesEntityExist(ped) then
+            -- Clear any tasks that might interfere
+            ClearPedTasks(ped)
+            
+            -- Teleport to safe position with ground Z
+            SetEntityCoords(ped, safeCoord.x, safeCoord.y, groundZ, false, false, false, true)
+            
+            -- Ensure pet is on ground
+            SetPedToRagdoll(ped, 100, 100, 0, false, false, false)
+            Wait(200)
+            
+            -- Clear ragdoll and make pet follow
+            ClearPedTasksImmediately(ped)
+            SetPedToRagdoll(ped, 0, 0, 0, false, false, false)
+            
+            -- Update state
+            activePet.inVehicle = false
+            activePet.vehicle = nil
+            
+            -- Make pet follow player
+            Wait(500)
+            TaskFollowToOffsetOfEntity(ped, plyped, 2.5, 2.5, 2.5, 5.0, -1, 3.0, true)
+            
+            exports.qbx_core:Notify('Pet exited the vehicle', 'success', 2000)
+        end
     end)
 end
 
