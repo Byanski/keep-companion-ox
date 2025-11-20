@@ -101,7 +101,9 @@ add the following shop definitions to your `ox_inventory/data/shops.lua`
         }
     },
 ```
+
 ### Step 4 : Setting up illegal poacher
+This is also added to the shops.lua (if you dont want it at cayo simply move it)
 
 ```lua
 Poacher = {
@@ -117,3 +119,4 @@ Poacher = {
         { ped = `csb_cletus`, scenario = 'PROP_HUMAN_SEAT_BENCH', loc = vector3(4803.68, -4601.88, 17.31), heading = 178.26, distance = 3.0 },
     }
 },
+```
