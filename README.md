@@ -100,7 +100,7 @@ add the following shop definitions to your `ox_inventory/data/shops.lua`
             -- Add other locations (like Sandy Shores MLO) here
         }
     },
-```
+    ```
 
 ### Step 4 : Setting up illegal poacher
 This is also added to the shops.lua (if you dont want it at cayo simply move it)
